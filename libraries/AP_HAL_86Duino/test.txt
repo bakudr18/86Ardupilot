@@ -1,0 +1,14 @@
+// SPI test
+AP_HAL::OwnPtr<AP_HAL::SPIDevice> mpu = x86SPI.get_device("mpu9250");
+uint8_t val = 0;
+mpu->set_read_flag(0x80);   // mpu need to set read flag
+mpu->read_registers(0x75, &val, 1 );
+Serial1.printf("SPI ms:%d, Who am I 0x%x\n", AP_HAL::millis() ,val );
+
+
+// I2C init
+//    x86I2C.init();
+AP_HAL::OwnPtr<AP_HAL::I2CDevice> mpu = x86I2C.get_device(0 , 0x68);
+uint8_t val = 0;
+mpu->read_registers(0x75, &val, 1 );
+Serial1.printf("ms:%d, Who am I 0x%x\n", AP_HAL::millis() ,val );
