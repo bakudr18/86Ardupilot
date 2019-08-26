@@ -26,7 +26,7 @@ static volatile bool CH_updated = false;
 static const char* name = "rcinput_Int";
 
 extern pinsconfig PIN86[];
-extern int INTPINSMAP[];
+extern int INTPINSMAP[];	// miss include GPIO.h ?
 
 static void enable_MCINT(int mc, int bit) {
     mc_outp(mc, 0x00, mc_inp(mc, 0x00) | (0x01<<bit));
