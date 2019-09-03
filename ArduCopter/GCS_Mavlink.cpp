@@ -1,6 +1,5 @@
 #include "Copter.h"
 #include "version.h"
-
 #include "GCS_Mavlink.h"
 
 void Copter::gcs_send_heartbeat(void)
@@ -1525,7 +1524,7 @@ void GCS_MAVLINK_Copter::handleMessage(mavlink_message_t* msg)
     {
         result = MAV_RESULT_ACCEPTED;
         copter.optflow.handle_msg(msg);
-//        hal.console->printf("get optical flow\n");
+//        gcs().send_text(MAV_SEVERITY_CRITICAL, "get optical flow\n");
     }
         
         break;
