@@ -1,4 +1,4 @@
-TOOLCHAIN = NATIVE
+TOOLCHAIN = 86DUINO
 
 include $(MK_DIR)/find_tools.mk
 
