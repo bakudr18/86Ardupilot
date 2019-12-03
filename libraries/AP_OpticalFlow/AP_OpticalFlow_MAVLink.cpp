@@ -3,65 +3,95 @@
 #include <AP_AHRS/AP_AHRS.h>
 
 #include "OpticalFlow.h"
+
+#define OPTFLOW_MAV_TIMEOUT_SEC 0.5f
+
 extern const AP_HAL::HAL& hal;
 
-AP_OpticalFlow_MAVLink::AP_OpticalFlow_MAVLink(OpticalFlow &_frontend):
-    OpticalFlow_backend(_frontend) 
+
+AP_OpticalFlow_MAVLink* AP_OpticalFlow_MAVLink::detect(OpticalFlow& _frontend)
 {
-    _integral_count = 0 ;
-    _last_read_ms = AP_HAL::millis();
+	// we assume mavlink messages will be sent into this driver
+	AP_OpticalFlow_MAVLink* sensor = new AP_OpticalFlow_MAVLink(_frontend);
+	return sensor;
 }
 
-void AP_OpticalFlow_MAVLink::init()
-{
-    
-}
 
+// read latest values from sensor and fill in x,y and totals.
 void AP_OpticalFlow_MAVLink::update()
 {
-    // read at 10 hz
-    if( _integral_count > 0 && AP_HAL::millis() - _last_read_ms > 100 )
-    {
-        struct OpticalFlow::OpticalFlow_state state;
-        state.device_id = 0;
-        state.surface_quality = _integral_quality/_integral_count; 
-        
-        state.flowRate = Vector2f(_integral_flow_x/_integral_count,
-                                  _integral_flow_y/_integral_count );
-        
-        // delta_time is in microseconds so multiply to get back to seconds
-        state.bodyRate = Vector2f(_integral_body_x/_integral_count ,_integral_body_y/_integral_count);
-        
-        _applyYaw(state.flowRate);
-        // copy results to front end
-        _update_frontend(state);
-        
-        _last_read_ms = AP_HAL::millis();
-        _integral_count = 0 ;
-        _integral_flow_x = 0 ;
-        _integral_flow_y = 0 ;
-        _integral_body_x = 0 ;
-        _integral_body_y = 0 ;
-    }
+	// record gyro values as long as they are being used
+	// the sanity check of dt below ensures old gyro values are not used
+	if (gyro_sum_count < 1000) {
+		const Vector3f& gyro = get_ahrs().get_gyro();
+		gyro_sum.x += gyro.x;
+		gyro_sum.y += gyro.y;
+		gyro_sum_count++;
+	}
+
+	// return without updating state if no readings
+	if (count == 0) {
+		return;
+	}
+
+	struct OpticalFlow::OpticalFlow_state state {};
+
+	state.surface_quality = quality_sum / count;
+
+	// calculate dt
+	const float dt = (latest_frame_us - prev_frame_us) * 1.0e-6;
+	prev_frame_us = latest_frame_us;
+
+	// sanity check dt
+	if (is_positive(dt) && (dt < OPTFLOW_MAV_TIMEOUT_SEC)) {
+		// calculate flow values
+		const float flow_scale_factor_x = 1.0f + 0.001f * _flowScaler().x;
+		const float flow_scale_factor_y = 1.0f + 0.001f * _flowScaler().y;
+
+		// copy flow rates to state structure
+		state.flowRate = { ((float)flow_sum.x / count) * flow_scale_factor_x * dt,
+						   ((float)flow_sum.y / count) * flow_scale_factor_y * dt };
+
+		// copy average body rate to state structure
+		state.bodyRate = { gyro_sum.x / gyro_sum_count, gyro_sum.y / gyro_sum_count };
+
+		_applyYaw(state.flowRate);
+		_applyYaw(state.bodyRate);
+	}
+	else {
+		// first frame received in some time so cannot calculate flow values
+		state.flowRate.zero();
+		state.bodyRate.zero();
+	}
+
+	_update_frontend(state);
+
+	// reset local buffers
+	flow_sum.zero();
+	quality_sum = 0;
+	count = 0;
+
+	// reset gyro sum
+	gyro_sum.zero();
+	gyro_sum_count = 0;
 }
 
-void AP_OpticalFlow_MAVLink::handle_msg(mavlink_message_t *msg)
+void AP_OpticalFlow_MAVLink::handle_msg(const mavlink_message_t &msg)
 {
-    mavlink_optical_flow_t packet;
-    mavlink_msg_optical_flow_decode(msg, &packet);
-       
-    const Vector3f &gyro = get_ahrs().get_gyro();
-        
-    const Vector2f flowScaler = _flowScaler();
-    float flowScaleFactorX = 1.0f + 0.001f * flowScaler.x;
-    float flowScaleFactorY = 1.0f + 0.001f * flowScaler.y;
-    
-    _integral_count++;
-    _integral_quality += packet.quality; 
-    _integral_flow_x += packet.flow_rate_x * flowScaleFactorX ;
-    _integral_flow_y += packet.flow_rate_y * flowScaleFactorY ;
-    
-    _integral_body_x += gyro.x ;
-    _integral_body_y += gyro.y ;
+	mavlink_optical_flow_t packet;
+	mavlink_msg_optical_flow_decode(&msg, &packet);
+
+	// record time message was received
+	// ToDo: add jitter correction
+	latest_frame_us = AP_HAL::micros64();
+
+	// add sensor values to sum
+	flow_sum.x += packet.flow_x;
+	flow_sum.y += packet.flow_y;
+	quality_sum += packet.quality;
+	count++;
+
+	// take sensor id from message
+	sensor_id = packet.sensor_id;
     
 }

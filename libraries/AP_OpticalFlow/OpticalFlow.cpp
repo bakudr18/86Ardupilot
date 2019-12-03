@@ -106,7 +106,7 @@ void OpticalFlow::init(void)
 #elif CONFIG_HAL_BOARD == HAL_BOARD_LINUX
         backend = AP_OpticalFlow_PX4Flow::detect(*this);
 #elif CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
-        backend = new AP_OpticalFlow_MAVLink(*this);
+		backend = AP_OpticalFlow_MAVLink::detect(*this);
 #endif
     }
 
@@ -127,7 +127,7 @@ void OpticalFlow::update(void)
 void OpticalFlow::handle_msg(mavlink_message_t *msg)
 {
     if (backend != nullptr) {
-        backend->handle_msg(msg);
+        backend->handle_msg(*msg);
     }
 }
 

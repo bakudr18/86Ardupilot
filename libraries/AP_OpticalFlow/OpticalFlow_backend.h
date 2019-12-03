@@ -36,7 +36,7 @@ public:
     virtual void update() = 0;
     
     // for mavlink type optical flow
-    virtual void handle_msg(mavlink_message_t *msg) { return; }
+    virtual void handle_msg(const mavlink_message_t &msg) {}
 
 protected:
     // access to frontend
