@@ -30,19 +30,19 @@ void setup()
 
     // set type of output, symmetrical angles or a number range;
     rc[CH_1].set_angle(4500);
-    rc[CH_1].set_default_dead_zone(80);
+    rc[CH_1].set_default_dead_zone(20);
 
     rc[CH_2].set_angle(4500);
-    rc[CH_2].set_default_dead_zone(80);
+    rc[CH_2].set_default_dead_zone(20);
 
     rc[CH_3].set_range(1000);
-    rc[CH_3].set_default_dead_zone(20);
+    rc[CH_3].set_default_dead_zone(30);
 
-    rc[CH_4].set_angle(6000);
-    rc[CH_4].set_default_dead_zone(500);
+    rc[CH_4].set_angle(4500);
+    rc[CH_4].set_default_dead_zone(20);
 
     rc[CH_5].set_range(1000);
-    rc[CH_6].set_range(800);
+    rc[CH_6].set_range(1000);
 
     rc[CH_7].set_range(1000);
 
