@@ -110,7 +110,7 @@ public:
 
     // create a new semaphore
     virtual Semaphore *new_semaphore(void) { return nullptr; }
-
+	virtual void _debug_counters() {}
     // allocate and free DMA-capable memory if possible. Otherwise return normal memory
     virtual void *dma_allocate(size_t size) { return malloc(size); }
     virtual void dma_free(void *ptr, size_t size) { return free(ptr); }

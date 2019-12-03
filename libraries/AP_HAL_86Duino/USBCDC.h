@@ -1,10 +1,13 @@
 #pragma once
 
 #include "AP_HAL_86Duino.h"
+#include "USBCore.h"
 
-class x86Duino::USBSerial : public AP_HAL::UARTDriver {
+#define TX_QUEUE_SIZE				(4096)
+
+class x86Duino::USBCDC : public AP_HAL::UARTDriver {
 public:
-    USBSerial() ;
+    USBCDC();
     /* Empty implementations of UARTDriver virtual methods */
     void begin(uint32_t b);
     void begin(uint32_t b, uint16_t rxS, uint16_t txS);
@@ -21,15 +24,9 @@ public:
 
     /* Empty implementations of Print virtual methods */
     size_t write(uint8_t c);
-    size_t write(const uint8_t *buffer, size_t size);
-
-    // 86duino additional API
-    int peek(void);
-    bool isConnected(void);
-    operator bool();
-
+    size_t write(const uint8_t* buffer, size_t size);
 private:
-    bool peek_stored;
-    int peek_val;
+    bool _is_initialized;
+    bool _nonblocking_writes;
     void* USBDEV;
 };

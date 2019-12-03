@@ -716,12 +716,12 @@ DMP_INLINE(void) Set_Control_Line_State(USB_Device *usb)
 	
 	usb->control_line_state = usb->Setup.wValue.Value;
 	
-        // modify to match Misson Planner
-//	if (usb->control_line_state == 0)
-//		usb->state = USB_DEV_CONFIGURED;
-//	else
-		usb->state = USB_DEV_CDC_CONNECT;
-	//printf("%d %d\n", usb->control_line_state, usb->state);
+    // modify to match Mission Planner
+	/*if (usb->control_line_state == 0)
+		usb->state = USB_DEV_CONFIGURED;    // when connect usb
+	else*/
+		usb->state = USB_DEV_CDC_CONNECT;   // when transfer data (ex: open Putty)
+	//printf("%d %d\n", usb->control_line_state, usb->state);	
 	SetEPnDLR(usb, EP0, IN, ENABLE | STSACK);
 	
 #ifdef DMP_86DUINO_RESET_ACTIVE
@@ -1358,7 +1358,7 @@ DMPAPI(void *) CreateUSBDevice(void)
 	usb->ling_coding.bParityType = 0;
 	usb->ling_coding.bDataBits   = 0;
 	
-	usb->control_line_state      = 0;
+	usb->control_line_state      = 99;
 	usb->serial_state            = 0;
 	
 	usb->DAR = usb->addr + 0x00;

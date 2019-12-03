@@ -49,6 +49,8 @@ public:
 
     virtual void     reboot(bool hold_in_bootloader) = 0;
 
+	virtual bool     in_timerprocess() { return false; }
+
     /**
        optional function to stop clock at a given time, used by log replay
      */

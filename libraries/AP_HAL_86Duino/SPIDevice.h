@@ -58,7 +58,7 @@ private:
     SPIBus &_bus;
     SPIDesc &_desc;
     AP_HAL::DigitalSource *_cs;
-    uint32_t _speed;
+    volatile uint32_t _speed;
     static Semaphore spi_semaphore;
 
 
@@ -77,7 +77,7 @@ class SPIDeviceManager : public AP_HAL::SPIDeviceManager {
 public:
     SPIDeviceManager();
     AP_HAL::OwnPtr<AP_HAL::SPIDevice> get_device(const char *name) override;
-    void init();
+    void init() {};
 
 private:
     static const uint8_t _n_device_desc;

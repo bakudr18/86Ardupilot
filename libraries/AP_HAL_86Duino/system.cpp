@@ -20,10 +20,14 @@ void panic(const char *errormsg, ...)
 
     va_start(ap, errormsg);
     vprintf(errormsg, ap);
+    hal.console->printf(errormsg, ap);
     va_end(ap);
 
     hal.scheduler->delay_microseconds(10000);
-    exit(1);
+    
+    hal.console->printf("\npanic\n");
+    ::printf("\npanic\n");
+    while (1) {}
 }
 
 uint32_t micros()
@@ -38,9 +42,9 @@ uint32_t millis()
 
 uint64_t micros64()
 {
-    uint64_t nowclocks;
-    __asm__ __volatile__ ("rdtsc" : "=A"(nowclocks) );
-    return nowclocks/vx86_CpuCLK();
+	uint64_t nowclocks;
+	__asm__ __volatile__("rdtsc" : "=A"(nowclocks));
+	return nowclocks / vx86_CpuCLK();
 }
 
 uint64_t millis64()

@@ -1,173 +1,214 @@
+#include <AP_HAL/AP_HAL.h>
+
 #include "RCOutput.h"
 #include "io.h"
 #include "mcm.h"
-#include "v86clock.h"
-#include "pins_arduino.h"
-extern const AP_HAL::HAL& hal ;
+#include "irq.h"
 
-namespace x86Duino {
-extern pinsconfig PIN86[];
+#define YES    (1)
+#define NO     (2)
+
+extern const AP_HAL::HAL& hal;
+
+using namespace x86Duino;
 
 RCOutput::RCOutput()
 {
-    _cork_on = false;
-    _safty_on = false;
+    _corking = false;
+    pending_mask = 0;
 }
 
-void RCOutput::init()
+void RCOutput::init() 
 {
-    // pin 29~32 map to channel 1~4
-    init_channel( CH_1, 29, 50, 0);
-    init_channel( CH_2, 30, 50, 0);
-    init_channel( CH_3, 31, 50, 0);
-    init_channel( CH_4, 32, 50, 0);
+    // pin 29~32 map to channel 1~4 default frequenc = 50Hz (20000 us)
+    _init_ch(CH_1, 29, 20000);
+    _init_ch(CH_2, 30, 20000);
+    _init_ch(CH_3, 31, 20000);
+    _init_ch(CH_4, 32, 20000);
 }
 
-void RCOutput::init_channel( uint8_t ch, uint8_t pin, uint16_t freq_hz, uint16_t width)
+void RCOutput::_init_ch(uint8_t ch, uint8_t pin, long microseconds)
 {
-    if( ch >= PWM_MAX_CH )   return;
-    int mc, md;
-    mc = PIN86[pin].PWMMC;
-    md = PIN86[pin].PWMMD;
-    if(mc == NOPWM || md == NOPWM)  return;
-    
-    if( freq_hz > 1600 ) freq_hz = 1600 ;
-    if( freq_hz < 50 )  freq_hz = 50 ;
-    CH_List[ch].freq = freq_hz ;
-    CH_List[ch].period = 1000000L/freq_hz;
-    
+    int mcn, mdn;
+    unsigned short crossbar_ioaddr = sb_Read16(0x64) & 0xfffe;
+
+    if (pin >= PINS) return;
+
+    mcn = PIN86[pin].PWMMC;
+    mdn = PIN86[pin].PWMMD;
+
+    if (mcn == NOPWM || mdn == NOPWM) return;
+    if (microseconds <= 0 || microseconds > 21474836) return;
+
+    CH_List[ch]._pin = pin;
+    CH_List[ch]._enable = false;
+    CH_List[ch]._duty = 1.0;
+    CH_List[ch]._period = (double)microseconds * SYSCLK;
+
     io_DisableINT();
-    
-    mcpwm_ReloadPWM(mc, md, MCPWM_RELOAD_CANCEL);
-    mcpwm_SetOutMask(mc, md, MCPWM_HMASK_NONE + MCPWM_LMASK_NONE);
-    mcpwm_SetOutPolarity(mc, md, MCPWM_HPOL_NORMAL + MCPWM_LPOL_NORMAL);
-    mcpwm_SetDeadband(mc, md, 0L);
-    mcpwm_ReloadOUT_Unsafe(mc, md, MCPWM_RELOAD_NOW);
-    mcpwm_SetWaveform(mc, md, MCPWM_EDGE_A0I1);
-    mcpwm_SetSamplCycle(mc, md, 1999L);   // no function for us
-    
-    mcpwm_SetWidth(mc, md, CH_List[ch].period*SYSCLK, width*SYSCLK);   // cycle = 20ms -> 50hz default, 0 for no output
-    mcpwm_ReloadPWM(mc, md, MCPWM_RELOAD_PEREND);
-    
-    mcpwm_Enable(mc, md);
-    io_outpb(CROSSBARBASE + 0x90 + PIN86[pin].gpN, 0x08);
-    
+
+    pwmInit(mcn, mdn);
+
+    if (mcpwm_ReadReloadPWM(mcn, mdn) != 0) mcpwm_ReloadPWM(mcn, mdn, MCPWM_RELOAD_CANCEL);
+    mcpwm_SetWidth(mcn, mdn, CH_List[ch]._period - 1.0, CH_List[ch]._duty - 1.0);
+    mcpwm_ReloadPWM(mcn, mdn, MCPWM_RELOAD_PEREND);
+
     io_RestoreINT();
-    
-    CH_List[ch].pin = pin ;
-    CH_List[ch].width = width ;
-    CH_List[ch].enable = true ;
+
+    io_outpb(crossbar_ioaddr + 0x90 + PIN86[pin].gpN, 0x08); // Enable PWM pin
+    mcpwm_Enable(mcn, mdn);
+
 }
 
-void RCOutput::set_freq(uint32_t chmask, uint16_t freq_hz)
+void RCOutput::set_freq(uint32_t chmask, uint16_t freq_hz) 
 {
-    // limit frequency between 50~1600 hz
-    if( freq_hz > 1600 ) freq_hz = 1600 ;
-    if( freq_hz < 50 )  freq_hz = 50 ;
-    
-    uint32_t period = 1000000L/freq_hz ; // in us
-    int mc, md;
-    
-    io_DisableINT();
-    for( int i = 0 ; i < PWM_MAX_CH ; i++ )
-    {
-        if( chmask & (0x01 << i) )  // check mask
-        {
-            mc = PIN86[CH_List[i].pin].PWMMC;
-            md = PIN86[CH_List[i].pin].PWMMD;
-            if(mcpwm_ReadReloadPWM(mc, md) != 0) mcpwm_ReloadPWM(mc, md, MCPWM_RELOAD_CANCEL);
-            mcpwm_SetWidth(mc, md, period*SYSCLK, CH_List[i].width*SYSCLK);   // cycle = 20ms -> 50hz default, 0 for no output
-            mcpwm_ReloadPWM(mc, md, MCPWM_RELOAD_PEREND);
-            CH_List[i].freq = freq_hz;
-            CH_List[i].period = period;
+    int mcn, mdn, pin;
+
+    for (uint8_t ch = 0; ch < X86_NUM_OUTPUT_CHANNELS; ch++) {
+        if (chmask & (1UL << ch)) {
+            CH_List[ch]._period = 1000000UL / freq_hz * SYSCLK;
+            pin = CH_List[ch]._pin;
+            mcn = PIN86[pin].PWMMC;
+            mdn = PIN86[pin].PWMMD;
+            if (mcpwm_ReadReloadPWM(mcn, mdn) != 0) mcpwm_ReloadPWM(mcn, mdn, MCPWM_RELOAD_CANCEL);
+            mcpwm_SetWidth(mcn, mdn, CH_List[ch]._period - 1.0, CH_List[ch]._duty - 1.0);
+            mcpwm_ReloadPWM(mcn, mdn, MCPWM_RELOAD_PEREND);
         }
     }
-    io_RestoreINT();
-    
 }
 
-uint16_t RCOutput::get_freq(uint8_t ch) {
-    if( ch >= PWM_MAX_CH )   return 50 ;
-    return CH_List[ch].freq ;
+uint16_t RCOutput::get_freq(uint8_t ch) 
+{
+    if (ch >= X86_NUM_OUTPUT_CHANNELS)
+        return 0;
+    else
+        return 1000000 / CH_List[ch]._period * SYSCLK;
 }
 
 void RCOutput::enable_ch(uint8_t ch)
 {
-    if( ch >= PWM_MAX_CH )   return ;
-    if( !CH_List[ch].enable )
-        init_channel(ch, CH_List[ch].pin, CH_List[ch].freq, CH_List[ch].width);  // re-initialize
+    if (ch >= X86_NUM_OUTPUT_CHANNELS)
+        return;
+    CH_List[ch]._enable = true;
 }
 
 void RCOutput::disable_ch(uint8_t ch)
 {
-    if( ch >= PWM_MAX_CH )   return ;
-    int mc, md;
-    mc = PIN86[CH_List[ch].pin].PWMMC;
-    md = PIN86[CH_List[ch].pin].PWMMD;
-    
-    io_DisableINT();
-    mcpwm_Disable(mc, md);  // stop MCM
-    io_RestoreINT();
-    
-    CH_List[ch].enable = false;
+    if (ch >= X86_NUM_OUTPUT_CHANNELS)
+        return;
+    CH_List[ch]._enable = false;
 }
 
 void RCOutput::write(uint8_t ch, uint16_t period_us)
 {
-    if( ch >= PWM_MAX_CH )   return ;
-    CH_List[ch].width = period_us;
-    if( !_cork_on ) PWM_output(ch);
-}
+    if (ch >= X86_NUM_OUTPUT_CHANNELS)
+        return;
+    if (CH_List[ch]._enable == false)
+        return;
 
-void RCOutput::PWM_output(uint8_t ch)
-{
-    if( ch >= PWM_MAX_CH )   return ;
-    int mc, md;
-    mc = PIN86[CH_List[ch].pin].PWMMC;
-    md = PIN86[CH_List[ch].pin].PWMMD;
-    
+    if (_corking) {
+        pending_mask |= (1U << ch);
+        pending[ch] = period_us;
+        return;
+    }
+
+    int mcn, mdn;
+    unsigned short crossbar_ioaddr = sb_Read16(0x64) & 0xfffe;
+    uint8_t pin = CH_List[ch]._pin;
+
+    mcn = PIN86[pin].PWMMC;
+    mdn = PIN86[pin].PWMMD;
+
+    if (period_us <= 0)
+    {
+        if (CH_List[ch]._duty > 0) {
+            CH_List[ch]._duty = 0;
+            safeClosePwmModule(mcn, mdn, CH_List[ch]._period);
+            hal.gpio->pinMode(pin, OUTPUT);
+            hal.gpio->write(pin, LOW);
+        }
+        return;
+    }
+
     io_DisableINT();
-    if(mcpwm_ReadReloadPWM(mc, md) != 0) mcpwm_ReloadPWM(mc, md, MCPWM_RELOAD_CANCEL);
-    mcpwm_SetWidth(mc, md, CH_List[ch].period*SYSCLK, CH_List[ch].width*SYSCLK);   // cycle = 20ms -> 50hz default, 0 for no output
-    mcpwm_ReloadPWM(mc, md, MCPWM_RELOAD_PEREND);
+    if (CH_List[ch]._duty == 0)
+    {
+        pwmInit(mcn, mdn);
+        
+        // if (pin <= 9)
+            // io_outpb(crossbar_ioaddr + 2, 0x01); // GPIO port2: 0A, 0B, 0C, 3A
+        // else if (pin > 28)
+            // io_outpb(crossbar_ioaddr, 0x03); // GPIO port0: 2A, 2B, 2C, 3C
+        // else
+            // io_outpb(crossbar_ioaddr + 3, 0x02); // GPIO port3: 1A, 1B, 1C, 3B
+    }
+
+    double duty = (double)period_us * SYSCLK;
+
+    if (mcpwm_ReadReloadPWM(mcn, mdn) != 0) mcpwm_ReloadPWM(mcn, mdn, MCPWM_RELOAD_CANCEL);
+    mcpwm_SetWidth(mcn, mdn, CH_List[ch]._period - 1.0, duty - 1.0);
+    mcpwm_ReloadPWM(mcn, mdn, MCPWM_RELOAD_PEREND);
     io_RestoreINT();
+
+    if (CH_List[ch]._duty == 0) {
+        io_outpb(crossbar_ioaddr + 0x90 + PIN86[pin].gpN, 0x08); // Enable PWM pin
+        mcpwm_Enable(mcn, mdn);
+    }
+
+    CH_List[ch]._duty = duty;
+
 }
 
-uint16_t RCOutput::read(uint8_t ch)
+uint16_t RCOutput::read(uint8_t ch) 
 {
-    if( ch >= PWM_MAX_CH )   return 0;
-    return CH_List[ch].width;
+    if (ch >= X86_NUM_OUTPUT_CHANNELS)
+        return 0;
+    else
+        return CH_List[ch]._duty / SYSCLK;
 }
 
 void RCOutput::read(uint16_t* period_us, uint8_t len)
 {
-    for( int i = 0; i < len; i++ )
-    {
-        if( i < PWM_MAX_CH )
-            period_us[i] = CH_List[i].width;
-        else
-            period_us[i] = 0;
+    for (int i = 0; i < len; i++) {
+        period_us[i] = read(i);
     }
 }
 
 void RCOutput::cork(void)
 {
-    _cork_on = true;
+    _corking = true;
 }
 
 void RCOutput::push(void)
 {
-    for( int i = 0; i < PWM_MAX_CH; i++ )
-        PWM_output(i);
-    _cork_on = false;
+    if (!_corking) {
+        return;
+    }
+    _corking = false;
+    for (uint8_t i = 0; i < X86_NUM_OUTPUT_CHANNELS; i++) {
+        if (pending_mask & (1U << i)) {
+            write(i, pending[i]);
+        }
+    }
+    pending_mask = 0;
 }
 
-bool RCOutput::force_safety_on(void) { return (_safty_on = true); }
-void RCOutput::force_safety_off(void) { _safty_on = false; }
+void RCOutput::pwmInit(int mcn, int mdn) {
+    mcpwm_ReloadPWM(mcn, mdn, MCPWM_RELOAD_CANCEL);
+    mcpwm_SetOutMask(mcn, mdn, MCPWM_HMASK_NONE + MCPWM_LMASK_NONE);
+    mcpwm_SetOutPolarity(mcn, mdn, MCPWM_HPOL_NORMAL + MCPWM_LPOL_NORMAL);
+    mcpwm_SetDeadband(mcn, mdn, 0L);
+    mcpwm_ReloadOUT_Unsafe(mcn, mdn, MCPWM_RELOAD_NOW);
 
-void RCOutput::set_output_mode(enum output_mode mode)
-{
-    
+    mcpwm_SetWaveform(mcn, mdn, MCPWM_EDGE_A0I1);
+    mcpwm_SetSamplCycle(mcn, mdn, 1999L); // sample cycle: 20ms
 }
 
+void RCOutput::safeClosePwmModule(int mcn, int mdn, double period) {
+    if (mcpwm_ReadReloadPWM(mcn, mdn) != 0) mcpwm_ReloadPWM(mcn, mdn, MCPWM_RELOAD_CANCEL);
+    mcpwm_SetWidth(mcn, mdn, period - 1.0, 0L);
+    mcpwm_ReloadPWM(mcn, mdn, MCPWM_RELOAD_PEREND);
+    while (mcpwm_ReadReloadPWM(mcn, mdn) != 0L);
+    while (mcpwm_ReadSTATREG2(mcn, mdn) > (period - 1L));
+    mcpwm_Disable(mcn, mdn);
 }

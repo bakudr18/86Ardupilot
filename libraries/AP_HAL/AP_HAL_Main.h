@@ -22,10 +22,6 @@
 #define AP_MAIN __EXPORT ArduPilot_main
 #endif
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
-#include <crt0.h>
-#define DPMI_MEMORY_ALL_LOCK(flag)      int _crt0_startup_flags = (flag) | _CRT0_FLAG_LOCK_MEMORY | _CRT0_FLAG_NONMOVE_SBRK;
-#endif
 
 #ifndef AP_MAIN
 #define AP_MAIN main
@@ -35,7 +31,6 @@
     AP_HAL::HAL::FunCallbacks callbacks(setup, loop); \
     extern "C" {                               \
     int AP_MAIN(int argc, char* const argv[]); \
-    DPMI_MEMORY_ALL_LOCK(0) \
     int AP_MAIN(int argc, char* const argv[]) { \
         hal.run(argc, argv, &callbacks); \
         return 0; \
@@ -44,7 +39,6 @@
 
 #define AP_HAL_MAIN_CALLBACKS(CALLBACKS) extern "C" { \
     int AP_MAIN(int argc, char* const argv[]); \
-    DPMI_MEMORY_ALL_LOCK(0) \
     int AP_MAIN(int argc, char* const argv[]) { \
         hal.run(argc, argv, CALLBACKS); \
         return 0; \

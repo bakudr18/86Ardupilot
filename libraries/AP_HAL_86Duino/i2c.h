@@ -28,6 +28,8 @@
 #include "dmpcfg.h"
 #include "i2cex.h"
 
+// for using i2c integrated function in i2c.h 
+#define ROBOIO
 
 #ifdef __cplusplus
 extern "C" {
@@ -231,7 +233,7 @@ extern "C" {
         DMPAPI(bool) i2c_Send(unsigned char addr, unsigned char* data, int datasize);
         DMPAPI(bool) i2c_Receive(unsigned char addr, unsigned char* buf, int bufsize);
         DMPAPI(bool) i2c_SensorRead(unsigned char addr, unsigned char cmd, unsigned char* buf, int bufsize);
-        DMPAPI(bool) i2c_SensorReadEX(unsigned char addr, unsigned char* cmds, int cmdsize, unsigned char* buf, int bufsize);
+        DMPAPI(bool) i2c_SensorReadEX(unsigned char addr, const unsigned char* cmds, int cmdsize, unsigned char* buf, int bufsize);
     #endif
 
 #ifdef __cplusplus
@@ -358,7 +360,7 @@ extern "C" {
         }
 
 
-        DMP_INLINE(bool) i2c_Send(unsigned char addr, unsigned char* data, int datasize) {
+        DMP_INLINE(bool) i2c_Send(unsigned char addr, const unsigned char* data, int datasize) {
             int i;
             
             if (i2c0master_StartN(addr, I2C_WRITE, datasize) == false) return false;
@@ -381,9 +383,9 @@ extern "C" {
             return true;
         }
 
-        DMP_INLINE(bool) i2c_SensorReadEX(unsigned char addr, unsigned char* cmds, int cmdsize, unsigned char* buf, int bufsize) {
+        DMP_INLINE(bool) i2c_SensorReadEX(unsigned char addr, const unsigned char* cmds, int cmdsize, unsigned char* buf, int bufsize) {
             int i; unsigned int val;
-            
+
             if (i2c0master_StartN(addr, I2C_WRITE, cmdsize) == false) return false;
             if (i2c0master_SetRestartN(I2C_READ, bufsize)   == false) return false;
 

@@ -22,7 +22,6 @@
 #include "io.h"
 
 extern const AP_HAL::HAL& hal ;
-
 namespace x86Duino {
 static unsigned int SPI_IOaddr;
 
@@ -68,7 +67,7 @@ struct SPIDesc {
 
 SPIDesc SPIDeviceManager::_device[] = {
     // different SPI tables per board subtype
-    SPIDesc("mpu9250",    0, 0, SPI_MODE3, 8, 9,  1*MHZ, 20*MHZ),
+    SPIDesc("mpu9250",    0, 0, SPI_MODE3, 8, 9,  1*MHZ, 10*MHZ),
     SPIDesc("bmp280",     0, 0, SPI_MODE3, 8, 8,  10*MHZ, 10*MHZ),
 };
 
@@ -88,7 +87,7 @@ public:
 private:
     uint32_t _initialized;
     uint8_t _mode;
-    uint32_t _speed;
+    volatile uint32_t _speed;
     void WriteCLKDIVR(uint8_t data);
     void Reset();
     void WriteCTRR(uint8_t data);
@@ -103,44 +102,46 @@ bool SPIBus::isInit()
 
 void SPIBus::init()
 {
-    void *pciDev = NULL;
-    
-    // Get SPI device base address
-    pciDev = pci_Alloc(0x00, 0x10, 0x01); // PCI SPI configuration space
-    if(pciDev == NULL) {printf("SPI device don't exist\n"); return;}
-    SPI_IOaddr = (unsigned)(pci_In16(pciDev, 0x10) & 0xFFFFFFF0L); // get SPI base address
-    pci_Free(pciDev);
-    
-    _mode = SPI_MODE3 ;
-    _speed = 4*MHZ ;
-    WriteCTRR(FULLDUPEX + _mode + RESET);
-    
-    io_outpb(SPI_IOaddr + 7, FULLDUPEX); // full-dupex
-    set_Mode(_mode);
-    io_outpb(SPI_IOaddr + 0x0b, 0x08); // delay clk between two transfers
-    //SOURCE clock/(2 * SPI_CLOCK_DIV)
-    set_Speed(_speed);
-    useFIFO();
-    
-    io_outpb(SPI_IOaddr + 4, 0x01); // set CS = high
-    
+    if (!_initialized) {
+        void* pciDev = NULL;
+
+        // Get SPI device base address
+        pciDev = pci_Alloc(0x00, 0x10, 0x01); // PCI SPI configuration space
+        if (pciDev == NULL) { printf("SPI device don't exist\n"); return; }
+        SPI_IOaddr = (unsigned)(pci_In16(pciDev, 0x10) & 0xFFFFFFF0L); // get SPI base address
+        pci_Free(pciDev);
+
+        _mode = SPI_MODE3;
+        _speed = 4 * MHZ;
+        WriteCTRR(FULLDUPEX + _mode + RESET);
+
+        io_outpb(SPI_IOaddr + 7, FULLDUPEX); // full-dupex
+        set_Mode(_mode);
+        io_outpb(SPI_IOaddr + 0x0b, 0x08); // delay clk between two transfers
+        //SOURCE clock/(2 * SPI_CLOCK_DIV)
+        set_Speed(_speed);
+        useFIFO();
+    }
     _initialized = true;
 }
 
 void SPIBus::set_Speed(uint32_t speed) {
     // set SPI speed
-    uint32_t clockSetting = PCI_CLOCK / 2;
-    uint32_t clockDiv = 1;
-    while (clockDiv < 128 && speed < clockSetting) {
-        clockSetting /= 2;
-        clockDiv *= 2;
-    }
-    setClockDivider(clockDiv); // 50M~0.39Mhz
+    uint32_t clockDiv;
+    double fdiv = PCI_CLOCK / (2.0 * speed);
+    uint32_t div = (uint32_t)fdiv;
+    if (fdiv == (double)div)
+        clockDiv = div;
+    else
+        clockDiv = div + 1;
+    //::printf("clockDiv = %lu\n", clockDiv);
+    setClockDivider(clockDiv);
     _speed = speed;
 }
 
 void SPIBus::set_Mode(uint8_t mode)
 {
+    if(SPI_IOaddr == 0) return;
     io_outpb(SPI_IOaddr + 7, (io_inpb(SPI_IOaddr + 7) & 0xF1 )| mode); // set mode
     _mode = mode;
 }
@@ -215,10 +216,17 @@ bool SPIDevice::transfer(const uint8_t *send, uint32_t send_len, uint8_t *recv, 
     if(SPI_IOaddr == 0) return 0;  
     
     // check bus setting
-    if( _bus.Speed() != _speed) _bus.set_Speed(_speed);
-    if( _bus.Mode() != _desc.mode ) _bus.set_Mode(_desc.mode);
-    
+    io_DisableINT();
     _cs_assert();
+    if (_bus.Speed() != _speed) {
+        _bus.set_Speed(_speed);
+        //::printf("_speed = %u\n", _speed);
+    }
+    if (_bus.Mode() != _desc.mode) {
+        //::printf("_desc.mode = %u\n", _desc.mode);
+        _bus.set_Mode(_desc.mode); 
+    }
+
     if( send_len )
     {
         for( uint32_t i = 0 ; i < send_len ; i++ )
@@ -241,7 +249,7 @@ bool SPIDevice::transfer(const uint8_t *send, uint32_t send_len, uint8_t *recv, 
         }
     }
     _cs_release();
-    
+    io_RestoreINT();
     return true;
 }
 
@@ -249,6 +257,7 @@ bool SPIDevice::transfer_fullduplex(const uint8_t *send, uint8_t *recv, uint32_t
 {
     if(SPI_IOaddr == 0) return 0;
     // check bus setting
+    io_DisableINT();
     if( _bus.Speed() != _speed) _bus.set_Speed(_speed);
     if( _bus.Mode() != _desc.mode ) _bus.set_Mode(_desc.mode);
     
@@ -264,7 +273,7 @@ bool SPIDevice::transfer_fullduplex(const uint8_t *send, uint8_t *recv, uint32_t
         }
     }
     _cs_release();
-    
+    io_RestoreINT();
     return true;
 }
 
@@ -275,7 +284,7 @@ AP_HAL::Semaphore *SPIDevice::get_semaphore()
 
 AP_HAL::Device::PeriodicHandle SPIDevice::register_periodic_callback(uint32_t period_usec, AP_HAL::Device::PeriodicCb cb)
 {
-    return ((Scheduler*)hal.scheduler)->register_spi_process( period_usec, cb) ;
+    return nullptr ;
 }
 
 void SPIDevice::_cs_assert()
@@ -300,6 +309,10 @@ void SPIDevice::_cs_release()
 SPIDeviceManager::SPIDeviceManager()
 {
     _bus = new SPIBus();
+    if (!_bus) {
+        printf("fail to create SPIDevice bus\n");
+        return;
+    }
 }
 
 AP_HAL::OwnPtr<AP_HAL::SPIDevice> SPIDeviceManager::get_device(const char *name)
@@ -323,6 +336,7 @@ AP_HAL::OwnPtr<AP_HAL::SPIDevice> SPIDeviceManager::get_device(const char *name)
     
     auto dev = AP_HAL::OwnPtr<AP_HAL::SPIDevice>(new SPIDevice(*_bus, *desc));
     if (!dev) {
+        printf("fail to new SPIDevice desciption name: %s\n", name);
         return nullptr;
     }
     

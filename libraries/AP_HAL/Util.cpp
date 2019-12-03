@@ -60,7 +60,7 @@ uint64_t AP_HAL::Util::get_system_clock_ms() const
 #elif CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
     struct timeval ts;
     gettimeofday(&ts, nullptr);
-    return ((uint64_t)(ts.tv_sec) * 1000) + (ts.tv_usec / 1000);
+    return ((long long)((ts.tv_sec * 1000) + (ts.tv_usec / 1000)));
 #else
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);

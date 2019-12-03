@@ -28,4 +28,5 @@ private:
     void _mtd_write(uint16_t line);
     void _init_file();
     void _check_file();
+
 };

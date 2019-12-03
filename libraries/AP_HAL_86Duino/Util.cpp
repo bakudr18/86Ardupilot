@@ -2,6 +2,7 @@
 #include "io.h"
 #include <cmath>
 #include <dos.h>
+#include <stdlib.h>
 
 extern const AP_HAL::HAL& hal ;
 
@@ -18,42 +19,51 @@ static inline uint64_t now_nsec()
     return (nowclocks*1000)/vx86_CpuCLK();
 }
 
+Util::Util()
+{
+    /* TODO: this number should come from vehicle code - just estimate the
+     * number of perf counters for now; if we grow more, it will just
+     * reallocate the memory pool */
+    _perf_counters.reserve(50);
+
+}
+
 enum Util::safety_state Util::safety_switch_state()
 {
     return SAFETY_NONE;
 }
 
+//void Util::set_hw_rtc(uint64_t time_utc_usec)
+//{
+//    struct timeval tp;
+//    tp.tv_sec = time_utc_usec/1000000 ;
+//    tp.tv_usec = time_utc_usec%1000000 ;
+//    settimeofday(&tp);
+//}
+//
+//uint64_t Util::get_hw_rtc() const
+//{
+//    struct timeval ts;
+//    gettimeofday(&ts, nullptr);
+//    return ((uint64_t)(ts.tv_sec) * 1000) + (ts.tv_usec / 1000);
+//}
+
 void Util::set_system_clock(uint64_t time_utc_usec)
 {
-    struct timeval tp;
-    tp.tv_sec = time_utc_usec/1000000 ;
-    tp.tv_usec = time_utc_usec%1000000 ;
-    settimeofday(&tp);
-}
-
-time_t Util::compile_time(char const *date, char const *time) {
-    char s_month[5];
-    int month, day, year;
-    int Hour, Minute, Second;
-    struct tm t = {0};
-    static const char month_names[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
-
-    sscanf(date, "%s %d %d", s_month, &day, &year);
-    sscanf(time, "%d:%d:%d", &Hour, &Minute, &Second);
-    month = (strstr(month_names, s_month)-month_names)/3;
-    
-    t.tm_sec  = Second;
-    t.tm_min  = Minute;
-    t.tm_hour  = Hour;
-    t.tm_mon = month;
-    t.tm_mday = day;
-    t.tm_year = year - 1900;
-    t.tm_isdst = -1;
-
-    return mktime(&t);
+	struct timeval tp;
+	tp.tv_sec = time_utc_usec / 1000000;
+	tp.tv_usec = time_utc_usec % 1000000;
+	settimeofday(&tp);
 }
 
 bool Util::get_system_id(char buf[]) { return false; }
+
+uint32_t Util::available_memory()
+{
+    // As djgpp cross compiler didn't release mallinfo() structure in stdlib.h,
+    // we assumed that memory is always big enough for malloc.
+    return 40960;
+}
 
 Util::perf_counter_t Util::perf_alloc(perf_counter_type t, const char *name)
 {

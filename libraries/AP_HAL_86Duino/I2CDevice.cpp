@@ -12,78 +12,61 @@
  * You should have received a copy of the GNU General Public License along
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include "Scheduler.h"
+//#include "Scheduler.h"
 #include <stdio.h>
-
 #include "I2CDevice.h"
 #include "io.h"
 #include "i2c.h"
 
-extern const AP_HAL::HAL& hal ;
+extern const AP_HAL::HAL& hal;
 
-namespace x86Duino {
+using namespace x86Duino;
 
 Semaphore I2CDevice::i2c_semaphore;
 
-I2CDevice::I2CDevice(uint8_t address) :
+I2CDevice::I2CDevice(uint8_t bus, uint8_t address) :
+    _bus(bus),
     _address(address)
 {
-    set_device_bus(0);  //I2C0
+    set_device_bus(bus);
     set_device_address(address);
+    asprintf(&pname, "I2C:%u:%02x",
+        (unsigned)bus, (unsigned)address);
+    perf = hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, pname);
 }
 
 I2CDevice::~I2CDevice()
 {
-    hal.console->printf("I2C device bus 0 address 0x%02x closed\n",
-           (unsigned)_address);
+    hal.console->printf("I2C device bus %u address 0x%02x closed\n",
+        (unsigned)_bus, (unsigned)_address);
+    free(pname);
 }
 
 bool I2CDevice::transfer(const uint8_t *send, uint32_t send_len,
                          uint8_t *recv, uint32_t recv_len)
 {
-    if( send_len )
-    {
-        i2cmaster_StartN(0, _address, I2C_WRITE, send_len);
-        for( uint32_t i = 0 ; i < send_len ; i++ )
-            i2cmaster_WriteN( 0, send[i]);
+    if (send_len == 0 && recv_len == 0) {
+        hal.console->printf("the number of bytes to read or write must > 0");
+        return false;
     }
-
-    if( recv_len )
-    {
-        i2cmaster_StartN(0, _address, I2C_READ, recv_len);
-        for( uint32_t i = 0 ; i < recv_len ; i++ )
-            recv[i] = i2cmaster_ReadN(0) ;
-    }
-    return true;
+    else if (send_len == 0)
+        return i2c_Receive(_address, recv, recv_len);
+    else if (recv_len == 0)
+        return i2c_Send(_address, send, send_len);
+    else
+        return i2c_SensorReadEX(_address, send, send_len, recv, recv_len);
 }
+
 
 AP_HAL::Semaphore *I2CDevice::get_semaphore()
 {
     return &i2c_semaphore;
 }
 
-/*
-  register a periodic callback
-*/
-AP_HAL::Device::PeriodicHandle I2CDevice::register_periodic_callback(uint32_t period_usec, AP_HAL::Device::PeriodicCb cb)
-{
-    return ((Scheduler*)hal.scheduler)->register_i2c_process( period_usec, cb) ;
-}
-
-AP_HAL::OwnPtr<AP_HAL::I2CDevice>
-I2CDeviceManager::get_device(uint8_t bus, uint8_t address)
-{
-    if( !_is_initailized )  init();
-    if( bus != 0 ) return nullptr ;
-    AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev = AP_HAL::OwnPtr<AP_HAL::I2CDevice>(new I2CDevice(address));
-    return dev;
-}
 
 void I2CDeviceManager::init(void)
 {
-    i2c_Init2(0xFB00, I2C_USEMODULE0, I2CIRQ_DISABLE, I2CIRQ_DISABLE);
-    i2c_SetSpeed(0, I2CMODE_AUTO, 400000L);
+    if(!i2c_Init(I2CMODE_AUTO, 400000L))
+        AP_HAL::panic("Failed to int i2c bus");
     _is_initailized = true;
-}
-
 }

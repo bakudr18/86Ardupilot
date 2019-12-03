@@ -792,81 +792,85 @@ DMPAPI(int) vx86_uart_GetIRQ(int com)
 {
 	int cpuid = vx86_CpuID();
 	int nIRQ = 0;
-	unsigned long uirt;
+	volatile unsigned long uirt = 16;
 	
-	if (cpuid == CPU_VORTEX86EX) {
-		unsigned short uart_baseAddr;
-		
-		if (com < 0 || com > 9)
-			return 0;
-		
-		uart_baseAddr = sb_Read16(0x60) & 0xfffe;
-		sb_Write16(0x60, sb_Read16(0x60) | 0x0001);
-		
-		uirt = ((io_inpdw(uart_baseAddr + com*4) >> 16) & 0x0FL);
-	}
-	else if (cpuid == CPU_VORTEX86DX2 || cpuid == CPU_VORTEX86DX3) {
-		if (com < 0 || com > 8)
-			return 0;
-			
-		switch (com)
-		{
-		case 0:
-			uirt = sb_Read8(0x53) & 0x0F;
-			break;
-		case 1:
-			uirt = (sb_Read(0xA0) >> 16) & 0x0FL;
-			break;
-		case 2:
-			uirt = (sb_Read(0xA4) >> 16) & 0x0FL;
-			break;
-		case 3:
-			uirt = (sb_Read(0xA8) >> 16) & 0x0FL;
-			break;
-		case 4:
-			uirt = (sb1_Read(0xA0) >> 16) & 0x0FL;
-			break;
-		case 5:
-			uirt = (sb1_Read(0xA4) >> 16) & 0x0FL;
-			break;
-		case 6:
-			uirt = (sb1_Read(0xA8) >> 16) & 0x0FL;
-			break;
-		case 7:
-			uirt = (sb1_Read(0xAC) >> 16) & 0x0FL;
-			break;
-		case 8:
-			uirt = (sb_Read(0xAC) >> 16) & 0x0FL;
-			break;
-		}
-	}
-	else if (cpuid == CPU_VORTEX86DX_A || cpuid == CPU_VORTEX86DX_C || cpuid == CPU_VORTEX86DX_D ||
-	         cpuid == CPU_VORTEX86MX   || cpuid == CPU_VORTEX86MX_PLUS) {
-		if (com < 0 || com > 3)
-			return 0;
-		
-		if ((cpuid == CPU_VORTEX86MX || cpuid == CPU_VORTEX86MX_PLUS) && com == 1)
-			return 0;
-			
-		switch (com)
-		{
-		case 0:
-			uirt = sb_Read8(0x53) & 0x0F;
-			break;
-		case 1:
-			uirt = (sb_Read(0xA0) >> 16) & 0x0FL;
-			break;
-		case 2:
-			uirt = (sb_Read(0xA4) >> 16) & 0x0FL;
-			break;
-		case 3:
-			uirt = (sb_Read(0xA8) >> 16) & 0x0FL;
-			break;
-		}
-	}
-	else
-		return 0;
-	
+    if (cpuid == CPU_VORTEX86EX) {
+        unsigned short uart_baseAddr;
+
+        if (com < 0 || com > 9)
+            return 0;
+
+        uart_baseAddr = sb_Read16(0x60) & 0xfffe;
+        sb_Write16(0x60, sb_Read16(0x60) | 0x0001);
+
+        uirt = ((io_inpdw(uart_baseAddr + com * 4) >> 16) & 0x0FL);
+    }
+    else if (cpuid == CPU_VORTEX86DX2 || cpuid == CPU_VORTEX86DX3) {
+        if (com < 0 || com > 8)
+            return 0;
+
+        switch (com)
+        {
+        case 0:
+            uirt = sb_Read8(0x53) & 0x0F;
+            break;
+        case 1:
+            uirt = (sb_Read(0xA0) >> 16) & 0x0FL;
+            break;
+        case 2:
+            uirt = (sb_Read(0xA4) >> 16) & 0x0FL;
+            break;
+        case 3:
+            uirt = (sb_Read(0xA8) >> 16) & 0x0FL;
+            break;
+        case 4:
+            uirt = (sb1_Read(0xA0) >> 16) & 0x0FL;
+            break;
+        case 5:
+            uirt = (sb1_Read(0xA4) >> 16) & 0x0FL;
+            break;
+        case 6:
+            uirt = (sb1_Read(0xA8) >> 16) & 0x0FL;
+            break;
+        case 7:
+            uirt = (sb1_Read(0xAC) >> 16) & 0x0FL;
+            break;
+        case 8:
+            uirt = (sb_Read(0xAC) >> 16) & 0x0FL;
+            break;
+        }
+    }
+    else if (cpuid == CPU_VORTEX86DX_A || cpuid == CPU_VORTEX86DX_C || cpuid == CPU_VORTEX86DX_D ||
+        cpuid == CPU_VORTEX86MX || cpuid == CPU_VORTEX86MX_PLUS) {
+        if (com < 0 || com > 3)
+            return 0;
+
+        if ((cpuid == CPU_VORTEX86MX || cpuid == CPU_VORTEX86MX_PLUS) && com == 1)
+            return 0;
+
+        switch (com)
+        {
+        case 0:
+            uirt = sb_Read8(0x53) & 0x0F;
+            break;
+        case 1:
+            uirt = (sb_Read(0xA0) >> 16) & 0x0FL;
+            break;
+        case 2:
+            uirt = (sb_Read(0xA4) >> 16) & 0x0FL;
+            break;
+        case 3:
+            uirt = (sb_Read(0xA8) >> 16) & 0x0FL;
+            break;
+        }
+    }
+    else
+        return 0;
+
+    if (uirt >= 16) {
+        return 0;
+    }
+
 	nIRQ = IRQ_route[uirt];
 		
 	return nIRQ;

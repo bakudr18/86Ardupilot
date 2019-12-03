@@ -7,6 +7,7 @@
 #include <atomic>
 #include <time.h>
 
+
 namespace x86Duino {
 
 class Perf_Counter {
@@ -40,6 +41,7 @@ public:
 
 class Util : public AP_HAL::Util {
 public:
+    Util();
     bool run_debug_shell(AP_HAL::BetterStream *stream) { return false; }
     /*
       return state of safety switch, if applicable
@@ -49,8 +51,11 @@ public:
     /*
       set system clock in UTC microseconds
      */
-    void set_system_clock(uint64_t time_utc_usec);
+    //void set_hw_rtc(uint64_t time_utc_usec);
 
+    //uint64_t get_hw_rtc() const;
+
+	void set_system_clock(uint64_t time_utc_usec);
     /*
       get system identifier (eg. serial number)
       return false if a system identifier is not available
@@ -60,7 +65,7 @@ public:
      */
     bool get_system_id(char buf[40]);
 
-    uint32_t available_memory(void) override { return 40960; }
+    uint32_t available_memory(void) override;
     
     perf_counter_t perf_alloc(perf_counter_type t, const char *name) override;
     void perf_begin(perf_counter_t h) override;
@@ -69,9 +74,8 @@ public:
 
     // create a new semaphore
     AP_HAL::Semaphore *new_semaphore(void) override;
-    void _debug_counters();
+    void _debug_counters() override;
 
-    time_t compile_time(const char *date, const char *time);
 private:
     std::vector<Perf_Counter> _perf_counters;
     std::atomic<unsigned int> _update_count;

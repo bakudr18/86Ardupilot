@@ -267,7 +267,7 @@ DMPAPI(bool) i2c_InitSW2(unsigned devs, int i2c0mode, unsigned long i2c0clkdelay
 	}
 	if ((I2C_ioSection = io_Init()) == -1) return false;
 
-    #ifdef ROBOIO
+    /*#ifdef ROBOIO
         switch (roboio_GetRBVer())
         {
             case RB_100b1:
@@ -283,7 +283,7 @@ DMPAPI(bool) i2c_InitSW2(unsigned devs, int i2c0mode, unsigned long i2c0clkdelay
                 devs = 0;
                 break;
         }
-    #endif
+    #endif*/
 
     I2C_swMode[0] = i2c0mode; I2CSW_delay[0] = i2c0clkdelay;
     I2C_swMode[1] = i2c1mode; I2CSW_delay[1] = i2c1clkdelay;
