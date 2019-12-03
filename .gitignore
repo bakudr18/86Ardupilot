@@ -344,3 +344,4 @@ config.mk
 *.apj
 .gdbinit
 .vs/
+*.upx
