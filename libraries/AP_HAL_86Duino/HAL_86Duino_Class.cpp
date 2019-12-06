@@ -185,7 +185,7 @@ void HAL_86Duino::run(int argc, char* const argv[], Callbacks* callbacks) const
             return;
         }
 
-        if (irq_Setting(GetMCIRQ(), IRQ_LEVEL_TRIGGER + IRQ_DISABLE_INTR) == false)
+        if (irq_Setting(GetMCIRQ(), IRQ_LEVEL_TRIGGER | IRQ_DISABLE_INTR | IRQ_USE_FPU) == false)
         {
             printf("MCM IRQ Setting fail\n"); 
             return;
