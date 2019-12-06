@@ -361,4 +361,25 @@ __dmp_inline(unsigned char) pci_inb(unsigned long addr) {
         return tmp;
     #endif
 }
+
+
+/* ========================================
+ *   x86 MSR Access
+ * ========================================
+ */
+#if defined     DMP_DOS_DJGPP
+    __dmp_inline(unsigned long long) msr_read(unsigned long msr) {
+        unsigned long eax, edx;
+
+        __asm__ volatile ("rdmsr" : "=a" (eax), "=d" (edx) : "c" (msr));
+        return (((unsigned long long)edx) << 32) | ((unsigned long long)eax);
+    }
+
+    __dmp_inline(void) msr_write(unsigned long msr, unsigned long long val) {
+        unsigned long eax = (unsigned long)val;
+        unsigned long edx = (unsigned long)(val >> 32);
+
+        __asm__ volatile ("wrmsr" : : "c" (msr), "a" (eax), "d" (edx));
+    }
+#endif
 /*------------------------  end. Primitive I/O Access  -----------------------*/

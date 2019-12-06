@@ -28,7 +28,10 @@
 
     // compiler memory barrier
     #define ATOMIC_MEM_BARRIER() __asm__ __volatile__("" : : : "memory")
-    //#define ATOMIC_MEM_BARRIER() __asm__ __volatile__("mfence" : : : "memory")
+
+    // hardware memory barrier
+    //#define ATOMIC_MEM_BARRIER() __asm__ __volatile__("mfence" : : : "memory")  // not supported on Vortex86DX/DX2/MX/EX
+    //#define ATOMIC_MEM_BARRIER() asm volatile("lock; addl $0,0(%%esp)" : : : "memory")  // for CPUs of not supporting "mfence" (SSE2)
 
     typedef volatile int ATOMIC_INT_t;
 
@@ -98,7 +101,12 @@
     #define ATOMIC_INT_DEC_TEST(x)  ((--(*(x))) != 0)
 
 #elif defined(DMP_WINDOWS)
-    #define ATOMIC_MEM_BARRIER() MemoryBarrier()
+    #ifndef DMP_WINCE_MSVC
+        #define ATOMIC_MEM_BARRIER() MemoryBarrier()  // hardware barrier
+        //#define ATOMIC_MEM_BARRIER() _ReadWriteBarrier()  // compiler barrier
+    #else
+        #define ATOMIC_MEM_BARRIER()
+    #endif
 
     typedef volatile int ATOMIC_INT_t;
 
@@ -115,4 +123,6 @@
 #else
     #error unsupported platforms to define atomic operations...
 #endif
+
+#define ATOMIC_VOLATILE(x) (*(volatile typeof(x) *)&(x))  // just = the ACCESS_ONCE() marco in Linux Kernel
 /*--------------------  end of Atomic Variable System  -----------------------*/

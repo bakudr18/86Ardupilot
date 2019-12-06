@@ -31,6 +31,11 @@
 //    note that most of functions in this lib assume no paging issue when 
 //    using them in ISR; so to use this lib in ISR in DJGPP, it is suggested 
 //    to employ PMODE/DJ or CWSDPR0 or HDPMI instead of CWSDPMI.
+//
+//    alternatively, if you really need to use CWSDPMI, put 
+//        #include <crt0.h>
+//        int _crt0_startup_flags = _CRT0_FLAG_LOCK_MEMORY;
+//    in your program to disable the virtual memory.
 ////////////////////////////////////////////////////////////////////////////////
 
 
@@ -66,6 +71,8 @@
 
     #include <conio.h>
     #include <dos.h>
+#elif defined   DMP_WINCE_MSVC
+    #include <windows.h>
 #elif defined(USE_WINIO2) || defined(USE_WINIO3)
     #include <windows.h>
     #include <winio.h>
@@ -315,7 +322,7 @@ static bool init_iosystem(void) {
          return false;
     }
 
-    #if defined(DMP_DOS_DJGPP) || defined(DMP_DOS_WATCOM) || defined(DMP_DOS_BC)
+    #if defined(DMP_DOS_DJGPP) || defined(DMP_DOS_WATCOM) || defined(DMP_DOS_BC) || defined(DMP_WINCE_MSVC)
         return true;
     #elif defined(USE_WINIO2) || defined(USE_WINIO3)
         if (!InitializeWinIo())
@@ -654,6 +661,39 @@ DMPAPI(void) io_Out8P(void* handle, unsigned long offset, unsigned char val) {
 DMPAPI(unsigned char) io_In8P(void* handle, unsigned long offset) {
     return portio_inpb((unsigned short)(((IO_BASE_t*)handle)->addr + offset));
 }
+
+
+// more MMIO-specific functions for speed hacking :p
+DMPAPI(void) io_MMIO_SeqOut32(void* handle, unsigned long offset, unsigned long* data, int data_count) {
+    if (data_count > 0) mmio_seq_outpdw((IO_BASE_t*)handle, offset, data, data_count);
+}
+DMPAPI(void) io_MMIO_SeqOut16(void* handle, unsigned long offset, unsigned short* data, int data_count) {
+    if (data_count > 0) mmio_seq_outpw((IO_BASE_t*)handle, offset, data, data_count);
+}
+DMPAPI(void) io_MMIO_SeqOut8(void* handle, unsigned long offset, unsigned char* data, int data_count) {
+    if (data_count > 0) mmio_seq_outpb((IO_BASE_t*)handle, offset, data, data_count);
+}
+DMPAPI(void) io_MMIO_SeqIn32(void* handle, unsigned long offset, unsigned long* buf, int data_count) {
+    if (data_count > 0) mmio_seq_inpdw((IO_BASE_t*)handle, offset, buf, data_count);
+}
+DMPAPI(void) io_MMIO_SeqIn16(void* handle, unsigned long offset, unsigned short* buf, int data_count) {
+    if (data_count > 0) mmio_seq_inpw((IO_BASE_t*)handle, offset, buf, data_count);
+}
+DMPAPI(void) io_MMIO_SeqIn8(void* handle, unsigned long offset, unsigned char* buf, int data_count) {
+    if (data_count > 0) mmio_seq_inpb((IO_BASE_t*)handle, offset, buf, data_count);
+}
+
+#if defined     DMP_DOS_DJGPP
+    DMPAPI(unsigned short) io_MMIO_GetSelector(void* handle) {
+        if (handle == NULL) return 0;
+        return (unsigned short)(((IO_BASE_t*)handle)->mmio_selector);
+    }
+#elif defined(DMP_DOS_WATCOM) || defined(USE_WINIO3) || defined(USE_PHYMEM) || defined(DMP_LINUX)
+    DMPAPI(unsigned long) io_MMIO_GetMappedBaseAddr(void* handle) {
+        if (handle == NULL) return 0L;
+        return ((IO_BASE_t*)handle)->addr;
+    }
+#endif
 /*------------------------  end. I/O Access Functions  -----------------------*/
 
 
@@ -773,6 +813,7 @@ static void* alloc_pci(unsigned char bus, unsigned char dev, unsigned char fun) 
 }
 
 
+static bool PCI_noVerbose = false;
 DMPAPI(void*) pci_Alloc(unsigned char bus, unsigned char dev, unsigned char fun) {
     // just ignore wrong dev & fun :p
     dev = dev & 0x1f; 
@@ -782,7 +823,8 @@ DMPAPI(void*) pci_Alloc(unsigned char bus, unsigned char dev, unsigned char fun)
     if (pci_indw(PCI_GET_CF8(bus, dev, fun)) == 0xffffffffUL) //&&
     if (fun == 0)
     {
-        err_print("%s: invalid PCI device!\n", __FUNCTION__);
+        if (PCI_noVerbose == false)
+            err_print("%s: invalid PCI device (bus:%02X dev:%02X fun:%02X)!\n", __FUNCTION__, (unsigned int)bus, (unsigned int)dev, (unsigned int)fun);
         return NULL;
     }
 
@@ -808,8 +850,9 @@ DMPAPI(void*) pci_Find(unsigned short vid, unsigned short did) {  // don't use t
         {
             if (tmpid == 0xffffffffUL)  // invalid PCI device
             {
-                // NOTE: shouldn't do this optimization for Vortex86DX2/DX3/EX's internal PCI devices (where fun0 may be shutdown but fun1 is still enabled)
-                if ((vx86_CpuID() == CPU_VORTEX86DX2) || (vx86_CpuID() == CPU_VORTEX86DX3) || (vx86_CpuID() == CPU_VORTEX86EX)) { /* do nothing ... */ } else break;
+                // NOTE: shouldn't do this optimization for Vortex86DX2/DX3/EX/EX2's internal PCI devices (where fun0 may be shutdown but fun1 is still enabled)
+                if ((vx86_CpuID() == CPU_VORTEX86DX2) || (vx86_CpuID() == CPU_VORTEX86DX3) || (vx86_CpuID() == CPU_VORTEX86EX)
+                    || (vx86_CpuID() == CPU_VORTEX86EX2_MASTER) || (vx86_CpuID() == CPU_VORTEX86EX2_SLAVE)) { /* do nothing ... */ } else break;
             }
             if ((pci_inb(pciaddr + 0x0eL) & 0x80) == 0) break;  // single-function PCI device
         }
@@ -897,17 +940,17 @@ static int get_cpuid(void) {
 		case 0x31504D44L: //"DMP1"
             return CPU_VORTEX86SX;
 		case 0x32504D44L: //"DMP2"
-		{
-            unsigned char nbrv = nb_Read8(0x08);
-            unsigned char sbrv = sb_Read8(0x08);
-            unsigned long ide  = pci_In32(VX86_pciDev[VX86_IDE], 0x00);
+            if (VX86_pciDev[VX86_IDE] != NULL)
+            {
+                unsigned char nbrv = nb_Read8(0x08);
+                unsigned char sbrv = sb_Read8(0x08);
+                unsigned long ide  = pci_In32(VX86_pciDev[VX86_IDE], 0x00);
 
-		    if ((nbrv == 1) && (sbrv == 1) && (ide == 0x101017f3L)) return CPU_VORTEX86DX_A;  // Vortex86DX ver. A
-		    if ((nbrv == 1) && (sbrv == 2) && (ide != 0x101017f3L)) return CPU_VORTEX86DX_C;  // Vortex86DX ver. C (PBA/PBB)
-		    if ((nbrv == 2) && (sbrv == 2) && (ide != 0x101017f3L)) return CPU_VORTEX86DX_D;  // Vortex86DX ver. D
-
+		        if ((nbrv == 1) && (sbrv == 1) && (ide == 0x101017f3L)) return CPU_VORTEX86DX_A;  // Vortex86DX ver. A
+		        if ((nbrv == 1) && (sbrv == 2) && (ide != 0x101017f3L)) return CPU_VORTEX86DX_C;  // Vortex86DX ver. C (PBA/PBB)
+		        if ((nbrv == 2) && (sbrv == 2) && (ide != 0x101017f3L)) return CPU_VORTEX86DX_D;  // Vortex86DX ver. D
+            }
             return CPU_VORTEX86DX_UNKNOWN;
-        }
 		case 0x33504D44L: //"DMP3"
 			return CPU_VORTEX86MX;
 		case 0x35504D44L: //"DMP5"
@@ -918,7 +961,10 @@ static int get_cpuid(void) {
 			return CPU_VORTEX86DX3;
 		case 0x37504D44L: //"DMP7"
 			return CPU_VORTEX86EX;
-	}
+        case 0x38504D44L: //"DMP8"
+            if (nb_Read(0x00) == 0x602717F3L) return CPU_VORTEX86EX2_SLAVE;
+            return CPU_VORTEX86EX2_MASTER;
+    }
 
 	return CPU_UNSUPPORTED;
 }
@@ -970,6 +1016,48 @@ static unsigned long get_cpufreq(void) {
         int           crs  = (int)((strapreg2 >> 10) & 0x03L);
         return (25L*cns) / (cms * (1L<<crs) * (cdiv+2L));
     }
+    else
+    if (vx86_CpuID() == CPU_VORTEX86EX2_MASTER)
+    {
+        unsigned long strapreg2 = nb_Read(0x64);
+        unsigned long cdiv = (strapreg2 >> 12) & 0x07L;
+        unsigned long cns  = strapreg2 & 0x7fL;
+        unsigned long clks = 0L;
+        switch ((nb_Read(0x68) >> 10) & 0x03L)
+        {
+            case 0: // NB PLL
+                clks = 25L * cns;
+                break;
+            case 1: // SB PLL 1200 Mhz
+                clks = 1200L;
+                break;
+            case 2: // PCI-E PLL 400 Mhz
+                clks = 400L;
+                break;
+        }
+        return clks / (cdiv + 2L);
+    }
+    else
+    if (vx86_CpuID() == CPU_VORTEX86EX2_SLAVE)
+    {
+        unsigned long strapreg2 = nb_Read(0x64);
+        unsigned long cdiv = (strapreg2 >> 15) & 0x07L;
+        unsigned long cns  = strapreg2 & 0x7fL;
+        unsigned long clks = 0L;
+        switch ((nb_Read(0x68) >> 12) & 0x03L)
+        {
+            case 0: // NB PLL
+                clks = 25L * cns;
+                break;
+            case 1: // SB PLL 1200 Mhz
+                clks = 1200L;
+                break;
+            case 2: // PCI-E PLL 400 Mhz
+                clks = 400L;
+                break;
+        }
+        return clks / (cdiv + 2L);
+    }
 
     return 0L;
 }
@@ -1011,6 +1099,48 @@ static unsigned long get_dramfreq(void) {
         int           crs  = (int)((strapreg2 >> 10) & 0x03L);
         return (25L*cns) / (cms * (1L<<crs) * ((ddiv+1L)*2L));
     }
+    else
+    if (vx86_CpuID() == CPU_VORTEX86EX2_MASTER)
+    {
+        unsigned long strapreg2 = nb_Read(0x64);
+        unsigned long ddiv = (strapreg2 >> 26) & 0x01L;
+        unsigned long cns  = strapreg2 & 0x7fL;
+        unsigned long clks = 0L;
+        switch ((nb_Read(0x68) >> 10) & 0x03L)
+        {
+            case 0: // NB PLL
+                clks = 25L * cns;
+                break;
+            case 1: // SB PLL 1200 Mhz
+                clks = 1200L;
+                break;
+            case 2: // PCI-E PLL 400 Mhz
+                clks = 400L;
+                break;
+        }
+        return clks / (2L * (ddiv + 1L));
+    }
+    else
+    if (vx86_CpuID() == CPU_VORTEX86EX2_SLAVE)
+    {
+        unsigned long strapreg2 = nb_Read(0x64);
+        unsigned long ddiv = (strapreg2 >> 26) & 0x01L;
+        unsigned long cns  = strapreg2 & 0x7fL;
+        unsigned long clks = 0L;
+        switch ((nb_Read(0x68) >> 12) & 0x03L)
+        {
+            case 0: // NB PLL
+                clks = 25L * cns;
+                break;
+            case 1: // SB PLL 1200 Mhz
+                clks = 1200L;
+                break;
+            case 2: // PCI-E PLL 400 Mhz
+                clks = 400L;
+                break;
+        }
+        return clks / (2L * (ddiv + 1L));
+    }
 
     return 0L;
 }
@@ -1023,7 +1153,11 @@ static bool init_vx86(void) {
     // get North Bridge fun0 & South Bridge fun0 & IDE PCI-CFG
     if ((VX86_pciDev[VX86_NB]  = pci_Alloc(0x00, 0x00, 0x00)) == NULL) goto FAIL_INITVX86;
     if ((VX86_pciDev[VX86_SB]  = pci_Alloc(0x00, 0x07, 0x00)) == NULL) goto FAIL_INITVX86;
-    if ((VX86_pciDev[VX86_IDE] = pci_Alloc(0x00, 0x0c, 0x00)) == NULL) goto FAIL_INITVX86;
+    PCI_noVerbose = true; // don't want pci_Alloc to be verbose at this stage :p
+    {
+        VX86_pciDev[VX86_IDE] = pci_Alloc(0x00, 0x0c, 0x00); // may be NULL on Vortex86EX2 Master/Slave
+    }
+    PCI_noVerbose = false;
     
     // now we are allowed to call get_cpuid()
     if ((VX86_cpuID = get_cpuid()) == CPU_UNSUPPORTED) goto FAIL_INITVX86;
@@ -1033,7 +1167,8 @@ static bool init_vx86(void) {
         // North Bridge fun1 exists (note NB fun1 isn't a normal PCI device -- its vid & did are 0xffff)
         if ((VX86_pciDev[VX86_NB1]  = pci_Alloc(0x00, 0x00, 0x01)) == NULL) goto FAIL_INITVX86;
     }
-    if ((vx86_CpuID() == CPU_VORTEX86DX2) || (vx86_CpuID() == CPU_VORTEX86DX3) || (vx86_CpuID() == CPU_VORTEX86EX))
+    if ((vx86_CpuID() == CPU_VORTEX86DX2) || (vx86_CpuID() == CPU_VORTEX86DX3) || (vx86_CpuID() == CPU_VORTEX86EX) 
+        || (vx86_CpuID() == CPU_VORTEX86EX2_MASTER) || (vx86_CpuID() == CPU_VORTEX86EX2_SLAVE))
     {
         // South Bridge fun1 exists (note SB fun1 isn't a normal PCI device -- its vid & did are 0xffff)
         if ((VX86_pciDev[VX86_SB1]  = pci_Alloc(0x00, 0x07, 0x01)) == NULL) goto FAIL_INITVX86;
