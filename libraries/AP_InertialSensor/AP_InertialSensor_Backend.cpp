@@ -180,7 +180,12 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
     delta_coning = delta_coning % delta_angle;
     delta_coning *= 0.5f;
 
-    if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+#if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
+	if (_sem->take_nonblocking())
+#else
+	if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER))
+#endif
+	{
         // integrate delta angle accumulator
         // the angles and coning corrections are accumulated separately in the
         // referenced paper, but in simulation little difference was found between
@@ -283,7 +288,12 @@ void AP_InertialSensor_Backend::_notify_new_accel_raw_sample(uint8_t instance,
     
     _imu.calc_vibration_and_clipping(instance, accel, dt);
 
-    if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+#if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
+	if (_sem->take_nonblocking())
+#else
+	if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER))
+#endif
+	{
         // delta velocity
         _imu._delta_velocity_acc[instance] += accel * dt;
         _imu._delta_velocity_acc_dt[instance] += dt;

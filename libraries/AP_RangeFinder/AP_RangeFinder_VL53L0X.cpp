@@ -557,6 +557,9 @@ bool AP_RangeFinder_VL53L0X::setMeasurementTimingBudget(uint32_t budget_us)
 
 void AP_RangeFinder_VL53L0X::init()
 {
+	if (hal.scheduler->i2c_in_timer()) {
+		hal.scheduler->suspend_timer_procs();
+	}
     // setup for 2.8V operation
     write_register(VHV_CONFIG_PAD_SCL_SDA__EXTSUP_HV,
                    read_register(VHV_CONFIG_PAD_SCL_SDA__EXTSUP_HV) | 0x01);
@@ -673,9 +676,18 @@ void AP_RangeFinder_VL53L0X::init()
 
     start_continuous();
 
-    // call timer() every 33ms. We expect new data to be available every 33ms
-    dev->register_periodic_callback(33000,
-                                    FUNCTOR_BIND_MEMBER(&AP_RangeFinder_VL53L0X::timer, void));
+	if (hal.scheduler->i2c_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
+
+	if (hal.scheduler->i2c_in_timer()) {
+		hal.scheduler->register_timer_process(FUNCTOR_BIND_MEMBER(&AP_RangeFinder_VL53L0X::timer, void));
+	}
+	else {
+		// call timer() every 33ms. We expect new data to be available every 33ms
+		dev->register_periodic_callback(33000,
+			FUNCTOR_BIND_MEMBER(&AP_RangeFinder_VL53L0X::timer, void));
+	}
 }
 
 
@@ -765,27 +777,29 @@ uint16_t AP_RangeFinder_VL53L0X::read_register16(uint8_t reg)
 */
 void AP_RangeFinder_VL53L0X::update(void)
 {
-#if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
-    uint16_t range_mm;
-    if (get_reading(range_mm) && range_mm < 8000)
-    {
-        state.distance_cm  = range_mm/10;
-        update_status();    
-    }
-    else
-    {
-        set_status(RangeFinder::RangeFinder_NoData);
-    }    
-#else
-    if (counter > 0) {
-        state.distance_cm = sum_mm / (10*counter);
-        sum_mm = 0;
-        counter = 0;
-        update_status();
-    } else {
-        set_status(RangeFinder::RangeFinder_NoData);
-    }
-#endif    
+	if (!hal.scheduler->i2c_in_timer()) {
+		uint16_t range_mm;
+		if (get_reading(range_mm) && range_mm < 8000)
+		{
+			state.distance_cm = range_mm / 10;
+			update_status();
+		}
+		else
+		{
+			set_status(RangeFinder::RangeFinder_NoData);
+		}
+	}
+	else {
+		if (counter > 0) {
+			state.distance_cm = sum_mm / (10 * counter);
+			sum_mm = 0;
+			counter = 0;
+			update_status();
+		}
+		else {
+			set_status(RangeFinder::RangeFinder_NoData);
+		}
+	}
 }
 
 void AP_RangeFinder_VL53L0X::timer(void)

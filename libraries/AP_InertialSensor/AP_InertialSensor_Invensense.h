@@ -76,6 +76,7 @@ private:
 
     void _set_filter_register(void);
     void _fifo_reset();
+	void _fifo_setup();
     bool _has_auxiliary_bus();
 
     /* Read samples from FIFO (FIFO enabled) */

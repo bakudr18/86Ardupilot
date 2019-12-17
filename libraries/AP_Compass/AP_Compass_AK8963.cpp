@@ -125,9 +125,13 @@ bool AP_Compass_AK8963::init()
 {
     AP_HAL::Semaphore *bus_sem = _bus->get_semaphore();
 
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->suspend_timer_procs();
+	}
+
     if (!bus_sem || !_bus->get_semaphore()->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
         hal.console->printf("AK8963: Unable to get bus semaphore\n");
-        return false;
+        goto fail_sem;
     }
 
     if (!_bus->configure()) {
@@ -167,15 +171,25 @@ bool AP_Compass_AK8963::init()
 
     bus_sem->give();
 
-#if CONFIG_HAL_BOARD != HAL_BOARD_86DUINO    
-	_bus->register_periodic_callback(10000, FUNCTOR_BIND_MEMBER(&AP_Compass_AK8963::_update, void));
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
 
-    #endif
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->register_timer_process(FUNCTOR_BIND_MEMBER(&AP_Compass_AK8963::_update, void));
+	}
+	else {
+		_bus->register_periodic_callback(10000, FUNCTOR_BIND_MEMBER(&AP_Compass_AK8963::_update, void));
+	}
 
     return true;
 
 fail:
     bus_sem->give();
+fail_sem:
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
     return false;
 }
 
@@ -185,32 +199,44 @@ void AP_Compass_AK8963::read()
         return;
     }
 
+	if (!hal.scheduler->spi_in_timer()) {
+		accumulate();
+	}
+
     if (_sem->take_nonblocking()) {
         if (_accum_count == 0) {
             /* We're not ready to publish */
             _sem->give();
-            accumulate();
             return;
         }
+
+		if (hal.scheduler->spi_in_timer()) {
+			hal.scheduler->suspend_timer_procs();
+		}
 
         Vector3f field = Vector3f(_mag_x_accum, _mag_y_accum, _mag_z_accum) / _accum_count;
         _mag_x_accum = _mag_y_accum = _mag_z_accum = 0;
         _accum_count = 0;
         _sem->give();
+
+		if (hal.scheduler->spi_in_timer()) {
+			hal.scheduler->resume_timer_procs();
+		}
+
         publish_filtered_field(field, _compass_instance);
     }
 }
 
 void AP_Compass_AK8963::accumulate(void)
 {
-    #if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
-    static uint64_t last_t = AP_HAL::micros64();
-    if( AP_HAL::micros64() - last_t > 10000)
-    {
-        last_t = AP_HAL::micros64();
-        _update();
-    }
-    #endif
+	if (!hal.scheduler->spi_in_timer()) {
+		static uint64_t last_t = AP_HAL::micros64();
+		if (AP_HAL::micros64() - last_t > 10000)
+		{
+			last_t = AP_HAL::micros64();
+			_update();
+		}
+	}
 }
 
 void AP_Compass_AK8963::_make_adc_sensitivity_adjustment(Vector3f& field) const
@@ -261,7 +287,12 @@ void AP_Compass_AK8963::_update()
     // correct raw_field for known errors
     correct_field(raw_field, _compass_instance);
 
-    if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+#if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
+	if (_sem->take_nonblocking())
+#else
+    if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER))
+#endif
+	{
         _mag_x_accum += raw_field.x;
         _mag_y_accum += raw_field.y;
         _mag_z_accum += raw_field.z;

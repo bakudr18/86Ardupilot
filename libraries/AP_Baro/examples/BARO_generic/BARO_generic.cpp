@@ -34,46 +34,44 @@ void setup()
     hal.scheduler->delay(1000);
 
     barometer.init();
-    //barometer.calibrate();
+    barometer.calibrate();
     timer = AP_HAL::micros();
 }
 
 void loop()
 {
-    hal.scheduler->delay(1000);
-    print("alive\n");
-    //if (!hal.console->is_initialized()) {
-    //    return;
-    //}
+    if (!hal.console->is_initialized()) {
+        return;
+    }
 
-    //// run accumulate() at 50Hz and update() at 10Hz
-    //if ((AP_HAL::micros() - timer) > 20 * 1000UL) {
-    //    timer = AP_HAL::micros();
-    //    barometer.accumulate();
-    //    if (counter++ < 5) {
-    //        return;
-    //    }
-    //    counter = 0;
-    //    barometer.update();
-    //    uint32_t read_time = AP_HAL::micros() - timer;
-    //    if (!barometer.healthy()) {
-    //        hal.console->printf("not healthy\n");
-    //        return;
-    //    }
-    //    hal.console->printf(" Pressure: %.2f Pa\n"
-    //                        " Temperature: %.2f degC\n"
-    //                        " Relative Altitude: %.2f m\n"
-    //                        " climb=%.2f m/s\n"
-    //                        " Read + update time: %u usec\n"
-    //                        "\n",
-    //                        (double)barometer.get_pressure(),
-    //                        (double)barometer.get_temperature(),
-    //                        (double)barometer.get_altitude(),
-    //                        (double)barometer.get_climb_rate(),
-    //                        (unsigned)read_time);
-    //} else {
-    //    hal.scheduler->delay(1);
-    //}
+    // run accumulate() at 50Hz and update() at 10Hz
+    if ((AP_HAL::micros() - timer) > 20 * 1000UL) {
+        timer = AP_HAL::micros();
+        barometer.accumulate();
+        if (counter++ < 5) {
+            return;
+        }
+        counter = 0;
+        barometer.update();
+        uint32_t read_time = AP_HAL::micros() - timer;
+        if (!barometer.healthy()) {
+            hal.console->printf("not healthy\n");
+            return;
+        }
+        hal.console->printf(" Pressure: %.2f Pa\n"
+                            " Temperature: %.2f degC\n"
+                            " Relative Altitude: %.2f m\n"
+                            " climb=%.2f m/s\n"
+                            " Read + update time: %u usec\n"
+                            "\n",
+                            (double)barometer.get_pressure(),
+                            (double)barometer.get_temperature(),
+                            (double)barometer.get_altitude(),
+                            (double)barometer.get_climb_rate(),
+                            (unsigned)read_time);
+    } else {
+        hal.scheduler->delay(1);
+    }
 }
 
 const struct AP_Param::GroupInfo        GCS_MAVLINK::var_info[] = {

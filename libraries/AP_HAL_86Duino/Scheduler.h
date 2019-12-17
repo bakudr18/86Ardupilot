@@ -32,6 +32,9 @@ public:
 	bool     in_main_thread() const override { return true; };
 
 	void     _run_timer_procs(bool called_from_isr);
+
+	bool     spi_in_timer() { return _spi_in_timer; }
+	bool	 i2c_in_timer() { return _i2c_in_timer; }
 private:
 	bool _initialized;
 	AP_HAL::Proc _failsafe;
@@ -39,6 +42,8 @@ private:
 	AP_HAL::MemberProc _timer_proc[X86DUINO_SCHEDULER_MAX_TIMER_PROCS];
 	volatile uint8_t _num_timer_procs;
 	volatile bool _in_timer_proc;
+	bool _spi_in_timer;
+	bool _i2c_in_timer;
 
 	AP_HAL::MemberProc _io_proc[X86DUINO_SCHEDULER_MAX_TIMER_PROCS];
 	volatile uint8_t _num_io_procs;
@@ -57,6 +62,7 @@ private:
 	AP_HAL::Util::perf_counter_t  _perf_io_timers;
 	AP_HAL::Util::perf_counter_t  _perf_storage_timer;
 	AP_HAL::Util::perf_counter_t  _perf_delay;
+	AP_HAL::Util::perf_counter_t  _perf_overrun_timers;
 
 	void call_delay_cb();
 	uint16_t _min_delay_cb_ms;

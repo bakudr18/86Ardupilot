@@ -58,7 +58,7 @@ private:
     SPIBus &_bus;
     SPIDesc &_desc;
     AP_HAL::DigitalSource *_cs;
-    volatile uint32_t _speed;
+    uint32_t _speed;
     static Semaphore spi_semaphore;
 
 

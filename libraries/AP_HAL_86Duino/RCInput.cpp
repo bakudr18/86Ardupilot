@@ -5,6 +5,7 @@
 #include "io.h"
 #include "pins_arduino.h"
 #include <assert.h>
+
 #if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
 
 extern const AP_HAL::HAL& hal;
@@ -59,11 +60,10 @@ static void (*(sifSetInt[3]))(int, int, unsigned long) = { mcpfau_SetCap1INT, mc
 static unsigned long (*(readCapStat[3]))(int, int) = { mcpfau_ReadCAPSTAT1, mcpfau_ReadCAPSTAT2, mcpfau_ReadCAPSTAT3 };
 static unsigned long (*(readCapFIFO[3]))(int, int, unsigned long*) = { mcpfau_ReadCAPFIFO1, mcpfau_ReadCAPFIFO2, mcpfau_ReadCAPFIFO3 };
 static volatile unsigned long _mcmode[4] = { MODE_NOSET, MODE_NOSET, MODE_NOSET, MODE_NOSET };
-static volatile unsigned long long int pulseHighData[4][3] = { 0ULL };
-static unsigned long long int ovdata[3] = { 0ULL, 0ULL, 0ULL };
+static volatile unsigned long long int pulseHighData[4][3] = { 0 };
+static unsigned long long int ovdata[3] = { 0, 0, 0 };
 static volatile int _ch_flag = 0x00;
 static volatile unsigned long long _rc_values[RC_INPUT_MAX_CH + 1] = { 0 }; // +1 for reserving channel 9
-static volatile uint64_t cnt = 0;
 
 static void _filterAndSampleWindowInit(int mc, int md) {
     mcsif_SetInputFilter(mc, md, 0L);
@@ -80,8 +80,8 @@ RCInput::RCInput()
 
 static int _user_int(int irq, void* data) {
     int i, mc, ch, irq_handled = 0;
-    unsigned long capdata;
-	long int stat;
+    unsigned long capdata, stat;
+
     // detect all sensor interface
     for (mc = 1; mc < 4; mc++)  // only use MC_MODULE1, MC_MODULE2 and MC_MODULE3
     {
@@ -113,9 +113,6 @@ static int _user_int(int irq, void* data) {
                             if (ch != 8 && _rc_values[ch] != pulseHighData[mc][i]) {
                                 _rc_values[ch] = pulseHighData[mc][i];
                                 _ch_flag |= (0x01 << ch);
-								if (_rc_values[ch] >= 200000) {
-									cnt++;
-								}
                             }   
                         }
                     }
@@ -227,16 +224,8 @@ uint16_t RCInput::read(uint8_t ch) {
 	if (!_init || ch > RC_INPUT_MAX_CH) {
 		return 0;
 	}
-	io_DisableINT();
     _ch_flag &= ~(0x01 << ch);
 	uint16_t rcinp = _rc_values[ch] / 100;
-	if (_rc_values[ch] >= 200000) {
-		// abnormal rc value > 2000 us
-		// uncertain bug in copter constructor
-		hal.console->printf("abnormal %llu rc input[%u] = %llu\n", cnt, ch, _rc_values[ch]);
-		//assert(_rc_values[ch] < 200000);
-	}
-	io_RestoreINT();
     return rcinp;
 }
 

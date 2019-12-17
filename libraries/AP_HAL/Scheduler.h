@@ -41,6 +41,8 @@ public:
     // suspend and resume both timer and IO processes
     virtual void     suspend_timer_procs() = 0;
     virtual void     resume_timer_procs() = 0;
+	virtual bool     spi_in_timer() { return false; }
+	virtual bool	 i2c_in_timer() { return false; }
 
     virtual void     register_timer_failsafe(AP_HAL::Proc,
                                              uint32_t period_us) = 0;

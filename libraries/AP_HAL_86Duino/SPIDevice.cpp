@@ -45,7 +45,8 @@ static unsigned int SPI_IOaddr;
 
 Semaphore SPIDevice::spi_semaphore;
 
-struct SPIDesc {
+class SPIDesc {
+public:
     SPIDesc(const char *name_, uint16_t bus_, uint16_t subdev_, uint8_t mode_,
             uint8_t bits_per_word_, int16_t cs_pin_, uint32_t lowspeed_,
             uint32_t highspeed_)
@@ -67,7 +68,7 @@ struct SPIDesc {
 
 SPIDesc SPIDeviceManager::_device[] = {
     // different SPI tables per board subtype
-    SPIDesc("mpu9250",    0, 0, SPI_MODE3, 8, 9,  1*MHZ, 10*MHZ),
+    SPIDesc("mpu9250",    0, 0, SPI_MODE3, 8, 9,  1*MHZ, 11*MHZ),
     SPIDesc("bmp280",     0, 0, SPI_MODE3, 8, 8,  10*MHZ, 10*MHZ),
 };
 
@@ -87,7 +88,7 @@ public:
 private:
     uint32_t _initialized;
     uint8_t _mode;
-    volatile uint32_t _speed;
+    uint32_t _speed;
     void WriteCLKDIVR(uint8_t data);
     void Reset();
     void WriteCTRR(uint8_t data);
@@ -134,7 +135,7 @@ void SPIBus::set_Speed(uint32_t speed) {
         clockDiv = div;
     else
         clockDiv = div + 1;
-    //::printf("clockDiv = %lu\n", clockDiv);
+	//hal.console->printf("clockDiv = %lu\n", clockDiv);
     setClockDivider(clockDiv);
     _speed = speed;
 }
@@ -168,6 +169,8 @@ void SPIBus::setClockDivider(uint16_t rate)
     if(SPI_IOaddr == 0) return;
     if(rate > 15)
         io_outpb(SPI_IOaddr + 6, (rate&0x0ff0)>>4);
+	else
+		io_outpb(SPI_IOaddr + 6, 0x00);
     
     io_outpb(SPI_IOaddr + 2, (io_inpb(SPI_IOaddr + 2) & 0xF0) | (rate%16));
 }
@@ -208,6 +211,7 @@ bool SPIDevice::set_speed(AP_HAL::Device::Speed speed)
         _speed = _desc.lowspeed;
         break;
     }
+	//hal.console->printf("%s speed: %lu\n", _desc.name, _speed);
     return true;
 }
 
@@ -216,14 +220,11 @@ bool SPIDevice::transfer(const uint8_t *send, uint32_t send_len, uint8_t *recv, 
     if(SPI_IOaddr == 0) return 0;  
     
     // check bus setting
-    io_DisableINT();
     _cs_assert();
     if (_bus.Speed() != _speed) {
         _bus.set_Speed(_speed);
-        //::printf("_speed = %u\n", _speed);
     }
     if (_bus.Mode() != _desc.mode) {
-        //::printf("_desc.mode = %u\n", _desc.mode);
         _bus.set_Mode(_desc.mode); 
     }
 
@@ -249,7 +250,6 @@ bool SPIDevice::transfer(const uint8_t *send, uint32_t send_len, uint8_t *recv, 
         }
     }
     _cs_release();
-    io_RestoreINT();
     return true;
 }
 
@@ -257,7 +257,6 @@ bool SPIDevice::transfer_fullduplex(const uint8_t *send, uint8_t *recv, uint32_t
 {
     if(SPI_IOaddr == 0) return 0;
     // check bus setting
-    io_DisableINT();
     if( _bus.Speed() != _speed) _bus.set_Speed(_speed);
     if( _bus.Mode() != _desc.mode ) _bus.set_Mode(_desc.mode);
     
@@ -273,7 +272,6 @@ bool SPIDevice::transfer_fullduplex(const uint8_t *send, uint8_t *recv, uint32_t
         }
     }
     _cs_release();
-    io_RestoreINT();
     return true;
 }
 
@@ -319,8 +317,9 @@ AP_HAL::OwnPtr<AP_HAL::SPIDevice> SPIDeviceManager::get_device(const char *name)
 {
     SPIDesc *desc = nullptr;
     
-    if( !_bus->isInit() ) _bus->init();
-    
+	if (!_bus->isInit()) {
+		_bus->init();
+	}
     /* Find the bus description in the table */
     for (uint8_t i = 0; i < _n_device_desc; i++) {
         if (!strcmp(_device[i].name, name)) {

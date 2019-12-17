@@ -43,9 +43,9 @@ extern const AP_HAL::HAL &hal;
 #define BMP280_REG_CONFIG    0xF5
 #define BMP280_REG_DATA      0xF7
 
-AP_Baro_BMP280::AP_Baro_BMP280(AP_Baro &baro, AP_HAL::OwnPtr<AP_HAL::Device> dev)
-    : AP_Baro_Backend(baro)
-    , _dev(std::move(dev))
+AP_Baro_BMP280::AP_Baro_BMP280(AP_Baro& baro, AP_HAL::OwnPtr<AP_HAL::Device> dev)
+	: AP_Baro_Backend(baro)
+	, _dev(std::move(dev))
 {
 }
 
@@ -114,10 +114,13 @@ bool AP_Baro_BMP280::_init()
 
     _dev->get_semaphore()->give();
 
-    #if CONFIG_HAL_BOARD != HAL_BOARD_86DUINO
-    // request 50Hz update
-    _dev->register_periodic_callback(20 * AP_USEC_PER_MSEC, FUNCTOR_BIND_MEMBER(&AP_Baro_BMP280::_timer, void));
-    #endif
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->register_timer_process(FUNCTOR_BIND_MEMBER(&AP_Baro_BMP280::_timer, void));
+	}
+	else {
+		// request 50Hz update
+		_dev->register_periodic_callback(20 * AP_USEC_PER_MSEC, FUNCTOR_BIND_MEMBER(&AP_Baro_BMP280::_timer, void));
+	}
 
     return true;
 }
@@ -137,14 +140,14 @@ void AP_Baro_BMP280::_timer(void)
 
 void AP_Baro_BMP280::accumulate(void)
 {
-    #if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
-    static uint64_t last_t = AP_HAL::micros64();
-    if( AP_HAL::micros64() - last_t > 20*AP_USEC_PER_MSEC)
-    {
-        last_t = AP_HAL::micros64();
-        _timer();
-    }
-    #endif
+	if (!hal.scheduler->spi_in_timer()) {
+		static uint64_t last_t = AP_HAL::micros64();
+		if (AP_HAL::micros64() - last_t > 20 * AP_USEC_PER_MSEC)
+		{
+			last_t = AP_HAL::micros64();
+			_timer();
+		}
+	}
 }
 
 // transfer data to the frontend
@@ -156,9 +159,14 @@ void AP_Baro_BMP280::update(void)
             accumulate();
             return;
         }
-
+		if (hal.scheduler->spi_in_timer()) {
+			hal.scheduler->suspend_timer_procs();
+		}
         _copy_to_frontend(_instance, _pressure, _temperature);
         _has_sample = false;
+		if (hal.scheduler->spi_in_timer()) {
+			hal.scheduler->resume_timer_procs();
+		}
         _sem->give();
     }
 }
@@ -173,10 +181,20 @@ void AP_Baro_BMP280::_update_temperature(int32_t temp_raw)
     var2 = (((((temp_raw >> 4) - ((int32_t)_t1)) * ((temp_raw >> 4) - ((int32_t)_t1))) >> 12) * ((int32_t)_t3)) >> 14;
     _t_fine = var1 + var2;
     t = (_t_fine * 5 + 128) >> 8;
-    if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
-        _temperature = ((float)t) / 100;
-        _sem->give();
-    }
+
+#if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
+	if (_sem->take_nonblocking())
+	{
+		_temperature = ((float)t) / 100;
+		_sem->give();
+	}
+#else
+	if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER))
+	{
+		_temperature = ((float)t) / 100;
+		_sem->give();
+	}
+#endif
 }
 
 // calculate pressure
@@ -202,9 +220,19 @@ void AP_Baro_BMP280::_update_pressure(int32_t press_raw)
     var2 = (((int64_t)_p8) * p) >> 19;
     p = ((p + var1 + var2) >> 8) + (((int64_t)_p7) << 4);
 
-    if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
-        _pressure = (float)p / 25600;
-        _has_sample = true;
-        _sem->give();
-    }
+#if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
+	if (_sem->take_nonblocking())
+	{
+		_pressure = (float)p / 25600;
+		_has_sample = true;
+		_sem->give();
+	}
+#else
+	if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER))
+	{
+		_pressure = (float)p / 25600;
+		_has_sample = true;
+		_sem->give();
+	}
+#endif
 }

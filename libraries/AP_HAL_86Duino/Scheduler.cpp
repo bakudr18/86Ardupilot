@@ -15,6 +15,9 @@
 #define MC_1k 3     // 1k hz timer
 #define MD_1k 2
 
+#define USE_TIMER 1
+#define USE_ACCUMULATE 0
+
 extern const AP_HAL::HAL & hal;
 
 using namespace x86Duino;
@@ -34,11 +37,13 @@ Scheduler::Scheduler() :
 	_perf_timers(hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, "APM_timers")),
 	_perf_io_timers(hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, "APM_IO_timers")),
 	_perf_storage_timer(hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, "APM_storage_timers")),
-	_perf_delay(hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, "APM_delay"))
+	_perf_delay(hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, "APM_delay")),
+	_perf_overrun_timers(hal.util->perf_alloc(AP_HAL::Util::PC_COUNT, "timer_overruns"))
 {
-	// protected variables
 	_min_delay_cb_ms = 65535;
 	_delay_cb = nullptr;
+	_spi_in_timer = USE_TIMER;
+	_i2c_in_timer = USE_TIMER;
 }
 
 static int mcint_offset[3] = { 0, 8, 16 };
@@ -152,17 +157,33 @@ void Scheduler::register_timer_process(AP_HAL::MemberProc proc)
 		hal.console->printf("Out of timer processes\n");
 	}
 }
-
+//unsigned char OLD8259M;
+//unsigned char OLD8259S;
 void Scheduler::suspend_timer_procs() {
 	_timer_suspended = true;
+	//OLD8259M = io_inpb(0x21);
+	//OLD8259S = io_inpb(0xA1);
+
+	//io_DisableINT();
+	//io_outpb(0xA1, 0xff);
+	//io_outpb(0x21, 0xff);
+	//io_RestoreINT();
+
 }
 
 void Scheduler::resume_timer_procs() {
 	_timer_suspended = false;
+
+	//io_DisableINT();
+	//io_outpb(0xA1, OLD8259S);
+	//io_outpb(0x21, OLD8259M);
+	//io_RestoreINT();
+
 	if (_timer_event_missed == true) {
 		_run_timer_procs(false);
 		_timer_event_missed = false;
 	}
+	//io_RestoreINT();
 }
 
 bool Scheduler::in_timerprocess() {
@@ -230,7 +251,10 @@ void Scheduler::_run_timer_procs(bool called_from_isr)
 		//AP_HAL::panic("_in_timer_proc should not happened\n");
 		return;
 	}
+	
 	_in_timer_proc = true;
+	hal.util->perf_begin(_perf_timers);
+	uint32_t t_over = AP_HAL::micros();
 
 	if (!_timer_suspended) {
 		// now call the timer based drivers
@@ -239,39 +263,45 @@ void Scheduler::_run_timer_procs(bool called_from_isr)
 				_timer_proc[i]();
 			}
 		}
+
+		uint32_t t;
+		// and the failsafe, if one is setup
+		if (_failsafe != nullptr) {
+			static uint32_t last_failsafe = 0;
+			t = AP_HAL::millis();
+			if (t - last_failsafe > 10) {
+				last_failsafe = t + 50; // 50ms = 20Hz
+				_failsafe();
+			}
+		}
+
+
+		static uint32_t last_dataflash = 0;
+		t = AP_HAL::millis();
+		if (t - last_dataflash > 10) {
+			last_dataflash = t + 300; // 300ms ~= 3Hz
+			for (int i = 0; i < _num_io_procs; i++) {
+				if (_io_proc[i]) {
+					_io_proc[i]();
+				}
+			}
+		}
+
 	}
 	else if (called_from_isr) {
 		_timer_event_missed = true;
 	}
 
-	uint32_t t;
-	// and the failsafe, if one is setup
-	if (_failsafe != nullptr) {
-		static uint32_t last_failsafe = 0;
-		t = AP_HAL::millis();
-		if (t - last_failsafe > 10) {
-			last_failsafe = t + 50; // 50ms = 20Hz
-			_failsafe();
-		}
-	}
-
-
-	static uint32_t last_dataflash = 0;
-	t = AP_HAL::millis();
-	if (t - last_dataflash > 10) {
-		last_dataflash = t + 300; // 300ms ~= 3Hz
-		for (int i = 0; i < _num_io_procs; i++) {
-			if (_io_proc[i]) {
-				_io_proc[i]();
-			}
-		}
-	}
 
 	hal.storage->_timer_tick();
 
 	// process analog input
 	//((AnalogIn*)hal.analogin)->_timer_tick();
 
+	if (AP_HAL::micros() - t_over > 999UL) {
+		hal.util->perf_count(_perf_overrun_timers);
+	}
+	hal.util->perf_end(_perf_timers);
 	_in_timer_proc = false;
 }
 

@@ -353,6 +353,9 @@ bool AP_InertialSensor_Invensense::_init()
 
 void AP_InertialSensor_Invensense::_fifo_reset()
 {
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->suspend_timer_procs();
+	}
     uint8_t user_ctrl = _last_stat_user_ctrl;
     user_ctrl &= ~(BIT_USER_CTRL_FIFO_RESET | BIT_USER_CTRL_FIFO_EN);
     _dev->set_speed(AP_HAL::Device::SPEED_LOW);
@@ -368,6 +371,27 @@ void AP_InertialSensor_Invensense::_fifo_reset()
 
     notify_accel_fifo_reset(_accel_instance);
     notify_gyro_fifo_reset(_gyro_instance);
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
+}
+
+void AP_InertialSensor_Invensense::_fifo_setup() {
+	uint8_t user_ctrl = _last_stat_user_ctrl;
+	user_ctrl &= ~(BIT_USER_CTRL_FIFO_RESET | BIT_USER_CTRL_FIFO_EN);
+	_dev->set_speed(AP_HAL::Device::SPEED_LOW);
+	_register_write(MPUREG_FIFO_EN, 0);
+	_register_write(MPUREG_USER_CTRL, user_ctrl);
+	_register_write(MPUREG_USER_CTRL, user_ctrl | BIT_USER_CTRL_FIFO_RESET);
+	_register_write(MPUREG_USER_CTRL, user_ctrl | BIT_USER_CTRL_FIFO_EN);
+	_register_write(MPUREG_FIFO_EN, BIT_XG_FIFO_EN | BIT_YG_FIFO_EN |
+		BIT_ZG_FIFO_EN | BIT_ACCEL_FIFO_EN | BIT_TEMP_FIFO_EN, true);
+	hal.scheduler->delay_microseconds(1);
+	_dev->set_speed(AP_HAL::Device::SPEED_HIGH);
+	_last_stat_user_ctrl = user_ctrl | BIT_USER_CTRL_FIFO_EN;
+
+	notify_accel_fifo_reset(_accel_instance);
+	notify_gyro_fifo_reset(_gyro_instance);
 }
 
 bool AP_InertialSensor_Invensense::_has_auxiliary_bus()
@@ -377,7 +401,13 @@ bool AP_InertialSensor_Invensense::_has_auxiliary_bus()
 
 void AP_InertialSensor_Invensense::start()
 {
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->suspend_timer_procs();
+	}
     if (!_dev->get_semaphore()->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+		if (hal.scheduler->spi_in_timer()) {
+			hal.scheduler->resume_timer_procs();
+		}
         return;
     }
 
@@ -389,7 +419,7 @@ void AP_InertialSensor_Invensense::start()
     hal.scheduler->delay(1);
 
     // always use FIFO
-    _fifo_reset();
+	_fifo_setup();
 
     // grab the used instances
     enum DevTypes gdev, adev;
@@ -483,6 +513,9 @@ void AP_InertialSensor_Invensense::start()
     _dev->set_speed(AP_HAL::Device::SPEED_HIGH);
 
     _dev->get_semaphore()->give();
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
 
     // setup sensor rotations from probe()
     set_gyro_orientation(_gyro_instance, _rotation);
@@ -494,10 +527,13 @@ void AP_InertialSensor_Invensense::start()
         AP_HAL::panic("Invensense: Unable to allocate FIFO buffer");
     }
 
-    #if CONFIG_HAL_BOARD != HAL_BOARD_86DUINO
-    // start the timer process to read samples
-    _dev->register_periodic_callback(1000, FUNCTOR_BIND_MEMBER(&AP_InertialSensor_Invensense::_poll_data, void));
-    #endif
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->register_timer_process(FUNCTOR_BIND_MEMBER(&AP_InertialSensor_Invensense::_poll_data, void));
+	}
+	else {
+		// start the timer process to read samples
+		_dev->register_periodic_callback(1000, FUNCTOR_BIND_MEMBER(&AP_InertialSensor_Invensense::_poll_data, void));
+	}
 }
 
 
@@ -506,11 +542,17 @@ void AP_InertialSensor_Invensense::start()
  */
 bool AP_InertialSensor_Invensense::update()
 {
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->suspend_timer_procs();
+	}
     update_accel(_accel_instance);
     update_gyro(_gyro_instance);
 
     _publish_temperature(_accel_instance, _temp_filtered);
 
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
     return true;
 }
 
@@ -519,16 +561,15 @@ bool AP_InertialSensor_Invensense::update()
  */
 void AP_InertialSensor_Invensense::accumulate()
 {
-    // nothing to do
-    #if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
-    // make reading from multi-thread to polling
-    static uint64_t last_t = 0 ;
-    if( AP_HAL::micros64() - last_t > 1000)
-    {
-        last_t = AP_HAL::micros64() ;
-        _read_fifo();   // polling in 86duino
-    }
-    #endif
+	if (!hal.scheduler->spi_in_timer()) {
+		// make reading from multi-thread to polling
+		static uint64_t last_t = 0;
+		if (AP_HAL::micros64() - last_t > 1000)
+		{
+			last_t = AP_HAL::micros64();
+			_read_fifo();   // polling in 86duino
+		}
+	}
 }
 
 AuxiliaryBus *AP_InertialSensor_Invensense::get_auxiliary_bus()
@@ -692,19 +733,20 @@ void AP_InertialSensor_Invensense::_read_fifo()
     uint16_t bytes_read;
     uint8_t *rx = _fifo_buffer;
     bool need_reset = false;
-
+	
     if (!_block_read(MPUREG_FIFO_COUNTH, rx, 2)) {
         goto check_registers;
     }
 
     bytes_read = uint16_val(rx, 0);
     n_samples = bytes_read / MPU_SAMPLE_SIZE;
-
+	
+	
     if (n_samples == 0) {
         /* Not enough data in FIFO */
         goto check_registers;
     }
-
+	
     /*
       testing has shown that if we have more than 32 samples in the
       FIFO then some of those samples will be corrupt. It always is
@@ -716,7 +758,7 @@ void AP_InertialSensor_Invensense::_read_fifo()
         need_reset = true;
         n_samples = 24;
     }
-    
+	
     while (n_samples > 0) {
         uint8_t n = MIN(n_samples, MPU_FIFO_BUFFER_LEN);
         if (!_dev->set_chip_select(true)) {
@@ -752,6 +794,7 @@ void AP_InertialSensor_Invensense::_read_fifo()
         n_samples -= n;
     }
 
+	
     if (need_reset) {
         //debug("fifo reset n_samples %u", bytes_read/MPU_SAMPLE_SIZE);
         _fifo_reset();
@@ -759,12 +802,20 @@ void AP_InertialSensor_Invensense::_read_fifo()
 
 check_registers:
     // check next register value for correctness
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->suspend_timer_procs();
+	}
     _dev->set_speed(AP_HAL::Device::SPEED_LOW);
     if (!_dev->check_next_register()) {
         _inc_gyro_error_count(_gyro_instance);
         _inc_accel_error_count(_accel_instance);
     }
     _dev->set_speed(AP_HAL::Device::SPEED_HIGH);
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
+	
+	return;
 }
 
 /*
@@ -887,8 +938,11 @@ bool AP_InertialSensor_Invensense::_check_whoami(void)
 
 bool AP_InertialSensor_Invensense::_hardware_init(void)
 {
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->suspend_timer_procs();
+	}
     if (!_dev->get_semaphore()->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
-        return false;
+		goto fail_sem;
     }
 
     // setup for register checking
@@ -898,8 +952,7 @@ bool AP_InertialSensor_Invensense::_hardware_init(void)
     _dev->set_speed(AP_HAL::Device::SPEED_LOW);
 
     if (!_check_whoami()) {
-        _dev->get_semaphore()->give();
-        return false;
+		goto fail;
     }
 
     // Chip reset
@@ -953,11 +1006,11 @@ bool AP_InertialSensor_Invensense::_hardware_init(void)
     }
 
     _dev->set_speed(AP_HAL::Device::SPEED_HIGH);
-    _dev->get_semaphore()->give();
+	
 
     if (tries == 5) {
         hal.console->printf("Failed to boot Invensense 5 times\n");
-        return false;
+		goto fail;
     }
 
 	if (_mpu_type == Invensense_ICM20608 ||
@@ -965,8 +1018,21 @@ bool AP_InertialSensor_Invensense::_hardware_init(void)
         // this avoids a sensor bug, see description above
 		_register_write(MPUREG_ICM_UNDOC1, MPUREG_ICM_UNDOC1_VALUE, true);
 	}
-    
+
+	_dev->get_semaphore()->give();
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
     return true;
+
+fail:
+	_dev->get_semaphore()->give();
+fail_sem:
+	if (hal.scheduler->spi_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
+	::printf("_hardware_init fail\n");
+	return false;
 }
 
 AP_Invensense_AuxiliaryBusSlave::AP_Invensense_AuxiliaryBusSlave(AuxiliaryBus &bus, uint8_t addr,
