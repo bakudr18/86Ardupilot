@@ -46,7 +46,7 @@ extern "C" {
 
         // allocate only one stack to be shared by all hardware interrupts (this works on CWSDPMI, but 
         // not useful on CWSDPR0 and PMODE/DJ because they don't swap interrupt stacks)
-        #define _IRQ_USE_COMMON_STACK
+        //#define _IRQ_USE_COMMON_STACK
     #else
         #define _IRQ_HANDLER(rtype) rtype
     #endif
