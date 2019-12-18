@@ -187,16 +187,17 @@ DMPAPI(int) usb_QueryRxQueue(void *vusb);
 DMPAPI(bool) usb_RxQueueFull(void *vusb);
 DMPAPI(bool) usb_RxQueueEmpty(void *vusb);
 DMPAPI(unsigned int) usb_Read(void *vusb);
-DMPAPI(int) usb_Receive(void *vusb, unsigned char* buf, int bsize);
+DMPAPI(int) usb_Receive(void *vusb, BYTE* buf, int bsize);
 DMPAPI(void) usb_FlushRxQueue(void *vusb);
 
 DMPAPI(int) usb_QueryTxQueue(void *vusb);
 DMPAPI(bool) usb_TxQueueFull(void *vusb);
 DMPAPI(bool) usb_TxQueueEmpty(void *vusb);
 DMPAPI(bool) usb_TxReady(void *vusb);
-DMPAPI(int)  usb_Send(void *vusb, unsigned char* buf, int bsize);
-DMPAPI(int)  hid_Send(void *vusb, unsigned char* buf, int bsize); //2014/06/17 modified: new
-DMPAPI(bool) usb_Write(void *vusb, unsigned char val);
+DMPAPI(int)  usb_Send(void *vusb, BYTE* buf, int bsize);
+DMPAPI(unsigned int)  usb_SendSize(void* vusb, BYTE* buf, unsigned int bsize);
+DMPAPI(int)  hid_Send(void *vusb, BYTE* buf, int bsize); //2014/06/17 modified: new
+DMPAPI(bool) usb_Write(void *vusb, BYTE val);
 DMPAPI(void) usb_FlushTxQueue(void *vusb);
 DMPAPI(void) usb_FlushWFIFO(void *vusb);
 

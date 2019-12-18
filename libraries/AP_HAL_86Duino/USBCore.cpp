@@ -1832,6 +1832,31 @@ DMPAPI(int) usb_Send(void *vusb, BYTE *buf, int bsize)
 	return i;
 }
 
+DMPAPI(unsigned int)  usb_SendSize(void* vusb, BYTE* buf, unsigned int bsize)
+{
+	USB_Device* usb = (USB_Device*)vusb;
+
+	if (usb == NULL) { err_print((char*)"%s: USB device is null.\n", __FUNCTION__); return 0; }
+
+	if (usb->state != USB_DEV_CDC_CONNECT)
+		return 0;
+
+	io_DisableINT();
+
+
+	if (QueueFull(usb->xmit)) {
+		io_RestoreINT();
+		return 0;
+	}
+
+	bsize = PushBufQueueSize(usb->xmit, buf, bsize);
+
+	EP2_InHandler(usb);
+
+	io_RestoreINT();
+
+	return bsize;
+}
 
 DMPAPI(int) hid_Send(void *vusb, BYTE *buf, int bsize)
 {

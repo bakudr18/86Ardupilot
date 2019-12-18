@@ -208,6 +208,7 @@ DMPAPI(bool) uart_TxQueueFull(void *vport);
 DMPAPI(bool) uart_TxQueueEmpty(void *vport);
 DMPAPI(bool) uart_TxReady(void *vport);
 DMPAPI(int)  uart_Send(void *vport, unsigned char* buf, int bsize);
+DMPAPI(unsigned int)  uart_SendSize(void* vport, unsigned char* buf, unsigned int bsize);
 DMPAPI(bool) uart_Write(void *vport, unsigned char val);
 DMPAPI(void) uart_FlushTxQueue(void *vport);
 DMPAPI(void) uart_FlushWFIFO(void *vport);

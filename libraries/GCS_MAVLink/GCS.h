@@ -221,6 +221,10 @@ public:
     // return current packet overhead for a channel
     static uint8_t packet_overhead_chan(mavlink_channel_t chan);
 
+	AP_HAL::Util::perf_counter_t _perf_send;
+	AP_HAL::Util::perf_counter_t _perf_handle;
+	char _perf_send_name[16];
+	char _perf_handle_name[16];
 protected:
 
     // overridable method to check for packet acceptance. Allows for

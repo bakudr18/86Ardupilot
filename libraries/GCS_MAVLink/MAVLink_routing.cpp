@@ -88,7 +88,7 @@ detect a reset of the flight controller, which implies a reset of its
 routing table.
 
 */
-bool MAVLink_routing::check_and_forward(mavlink_channel_t in_channel, const mavlink_message_t* msg)
+bool MAVLink_routing::check_and_forward(mavlink_channel_t in_channel, const mavlink_message_t* msg, GCS_MAVLINK* gcs)
 {
     // handle the case of loopback of our own messages, due to
     // incorrect serial configuration.
@@ -154,13 +154,21 @@ bool MAVLink_routing::check_and_forward(mavlink_channel_t in_channel, const mavl
                              (int)target_system,
                              (int)target_component);
 #endif
+
+					//hal.scheduler->suspend_timer_procs();
+					//hal.util->perf_begin(gcs->_perf_send);
+					//uint64_t t = AP_HAL::micros64();
                     _mavlink_resend_uart(routes[i].channel, msg);
+					//hal.console->printf("chan %u resend %u bytes time = %llu us\n", routes[i].channel, MAVLINK_CORE_HEADER_MAVLINK1_LEN + 1 + msg->len + 2, AP_HAL::micros64() - t);
+					//hal.util->perf_end(gcs->_perf_send);
+					//hal.scheduler->resume_timer_procs();
                 }
                 sent_to_chan[routes[i].channel] = true;
                 forwarded = true;
             }
         }
     }
+
     if (!forwarded && match_system) {
         process_locally = true;
     }

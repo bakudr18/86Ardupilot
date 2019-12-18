@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #if defined DMP_DOS_DJGPP
 #include <time.h>
 #elif defined DMP_DOS_WATCOM
@@ -254,6 +255,52 @@ static int _send_int(SerialPort *port, unsigned char* buf, int bsize)
     }
 
     return i;
+}
+
+static unsigned int _send_int_buf(SerialPort* port, unsigned char* buf, unsigned int bsize) 
+{
+	io_DisableINT();
+	
+	if (QueueFull(port->xmit)) {
+		io_RestoreINT();
+		return 0;
+	}
+	
+	bsize = PushBufQueueSize(port->xmit, buf, bsize);
+	
+	if (!(port->ier & THREI))
+	{
+		switch (port->control)
+		{
+		case NO_CONTROL:
+		{
+			io_outpb(port->IER, port->ier |= THREI);
+		}
+		break;
+
+		case RTS_CTS:
+		{
+			if (port->cts == CTS_ON) {
+				io_outpb(port->IER, port->ier |= THREI);
+			}
+		}
+		break;
+
+		case XON_XOFF:
+		{
+			if (port->xonxoff_rcvd != XOFF_RCVD) {
+				io_outpb(port->IER, port->ier |= THREI);
+			}
+		}
+		break;
+
+		default: break;
+		};
+	}
+
+	io_RestoreINT();
+
+	return bsize;
 }
 
 //
@@ -779,6 +826,12 @@ DMPAPI(int) uart_Send(void *vport, unsigned char* buf, int bsize)
     return (port == NULL) ? (0) : (port->send(port, buf, bsize));
 }
 
+DMPAPI(unsigned int)  uart_SendSize(void* vport, unsigned char* buf, unsigned int bsize)
+{
+	SerialPort* port = (SerialPort*)vport;
+	return (port == NULL) ? (0) : (_send_int_buf(port, buf, bsize));
+}
+
 DMPAPI(bool) uart_Write(void *vport, unsigned char val)
 {
     if (uart_Send(vport, &val, 1) <= 0)
@@ -808,6 +861,7 @@ int uart_count = 0 ;
 static int UART_ISR(int irq, void *data)
 {
     int i;
+	unsigned int j, write_size;
     unsigned char c, iir;
     SerialPort *port;
 
@@ -886,8 +940,16 @@ static int UART_ISR(int irq, void *data)
                     io_outpb(port->IER, port->ier &= 0xfd);
                 else
                 {
-                    for (i = 0; i < port->WFIFO_Size && QueueEmpty(port->xmit) == false; i++)
-                        io_outpb(port->TXDB, (unsigned char)PopQueue(port->xmit));
+                    /*for (i = 0; i < port->WFIFO_Size && QueueEmpty(port->xmit) == false; i++)
+                        io_outpb(port->TXDB, (unsigned char)PopQueue(port->xmit));*/
+					io_DisableINT();
+					write_size = (unsigned int)QueueSize(port->xmit);
+					if (write_size > (unsigned int)port->WFIFO_Size) {
+						write_size = (unsigned int)port->WFIFO_Size;
+					}
+					for(j = 0; j < write_size; j++)
+						io_outpb(port->TXDB, PopQueueNoncheck(port->xmit));
+					io_RestoreINT();
                 }
             }
                 break;

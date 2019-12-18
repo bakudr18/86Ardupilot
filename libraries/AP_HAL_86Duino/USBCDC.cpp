@@ -118,11 +118,11 @@ size_t USBCDC::write(const uint8_t* buffer, size_t size)
     }
 
     // remaining queue space
-    uint32_t space = txspace();
+    /*uint32_t space = txspace();
     if (space <= 0) {
         return 0;
-    }
+    }*/
 
-    ret = usb_Send(USBDEV, (uint8_t*)buffer, size);
+    ret = usb_SendSize(USBDEV, (uint8_t*)buffer, size);
     return (ret > 0) ? ret : 0;
 }

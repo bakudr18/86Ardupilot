@@ -64,6 +64,12 @@ GCS_MAVLINK::init(AP_HAL::UARTDriver *port, mavlink_channel_t mav_chan)
 
     snprintf(_perf_update_name, sizeof(_perf_update_name), "GCS_Update_%u", chan);
     _perf_update = hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, _perf_update_name);
+
+	snprintf(_perf_send_name, sizeof(_perf_send_name), "GCS_resend_%u", chan);
+	_perf_send = hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, _perf_send_name);
+
+	snprintf(_perf_handle_name, sizeof(_perf_handle_name), "GCS_handle_%u", chan);
+	_perf_handle = hal.util->perf_alloc(AP_HAL::Util::PC_ELAPSED, _perf_handle_name);
 }
 
 
@@ -841,10 +847,17 @@ void GCS_MAVLINK::packetReceived(const mavlink_status_t &status,
     if (msg_snoop != nullptr) {
         msg_snoop(&msg);
     }
-    if (routing.check_and_forward(chan, &msg) &&
-        accept_packet(status, msg)) {
-        handleMessage(&msg);
+
+	
+	if (!routing.check_and_forward(chan, &msg, this)) {
+		return;
+	}
+    if (!accept_packet(status, msg)) {
+        return;
     }
+	
+	handleMessage(&msg);
+	
 }
 
 void

@@ -51,18 +51,24 @@ static void test_uart(AP_HAL::UARTDriver *uart, const char *name)
 void loop(void)
 {
     test_uart(hal.uartA, "uartA");
-    test_uart(hal.uartB, "uartB");
-    test_uart(hal.uartC, "uartC");
-    test_uart(hal.uartD, "uartD");
-    test_uart(hal.uartE, "uartE");
-
-    // also do a raw printf() on some platforms, which prints to the
-    // debug console
-#if HAL_OS_POSIX_IO
-    ::printf("Hello on debug console at %.3f seconds\n", (double)(AP_HAL::millis() * 0.001f));
-#endif
-
-    hal.scheduler->delay(1000);
+//    test_uart(hal.uartB, "uartB");
+//    test_uart(hal.uartC, "uartC");
+//    test_uart(hal.uartD, "uartD");
+//    test_uart(hal.uartE, "uartE");
+//
+//    // also do a raw printf() on some platforms, which prints to the
+//    // debug console
+//#if HAL_OS_POSIX_IO
+//    ::printf("Hello on debug console at %.3f seconds\n", (double)(AP_HAL::millis() * 0.001f));
+//#endif
+	const unsigned char str[32] = "abcdefghijklmnopqrstuvwxyz1234\n";
+	hal.uartB->write(str, sizeof(unsigned char) * 32);
+	hal.scheduler->delay(100);
+	while(hal.uartC->available()) {
+		char c = hal.uartC->read();
+		hal.console->printf("%c",c);
+	}
+    hal.scheduler->delay(100);
 }
 
 AP_HAL_MAIN();

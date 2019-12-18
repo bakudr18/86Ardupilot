@@ -27,7 +27,7 @@ public:
 
       This returns true if the message should be processed locally
     */
-    bool check_and_forward(mavlink_channel_t in_channel, const mavlink_message_t* msg);
+    bool check_and_forward(mavlink_channel_t in_channel, const mavlink_message_t* msg, GCS_MAVLINK* gcs);
 
     /*
       send a MAVLink message to all components with this vehicle's system id

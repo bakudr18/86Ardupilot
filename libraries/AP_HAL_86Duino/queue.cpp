@@ -31,6 +31,8 @@
 #include <string.h>
 #include "queue.h"
 #include "io.h"
+#include <AP_HAL/AP_HAL.h>
+extern const AP_HAL::HAL& hal;
 
 DMPAPI(Queue *) CreateBufQueue(unsigned long size, unsigned long dsize)
 {
@@ -97,6 +99,40 @@ DMPAPI(bool) PushBufQueue(Queue *queue, void *buf)
 	return ret;
 }
 
+// Note: this function should be called after disable interrupt.
+// It will trim the bsize if there is not enough queue size.
+DMPAPI(unsigned int) PushBufQueueSize(Queue* queue, void* buf, unsigned int bsize)
+{
+	unsigned buf_tail_size, space;
+
+	space = queue->size - 1 - QueueSize(queue);
+	if (space == 0) {
+		return 0;
+	}
+
+	// trim the size
+	if (bsize > space) {
+		bsize = space;
+	}
+
+	if (queue->head > queue->tail || (buf_tail_size = queue->size - queue->tail) >= bsize) {
+		// push back at tail
+		memcpy((unsigned char*)queue->data + queue->tail * queue->dsize, buf, bsize * queue->dsize);
+	}
+	else if (buf_tail_size > 0) {
+		// divide to 2 pieces and push
+		memcpy((unsigned char*)queue->data + queue->tail * queue->dsize, buf, buf_tail_size * queue->dsize);
+		memcpy((unsigned char*)queue->data, (unsigned char*)buf + buf_tail_size, (bsize - buf_tail_size) * queue->dsize);
+	}
+	else {
+		hal.console->printf("error: PushBufQueueSize()\n");
+	}
+
+	queue->tail = (queue->tail + bsize) % queue->size;
+
+	return bsize;
+}
+
 DMPAPI(unsigned int) PopQueue(Queue *queue)
 {
 	unsigned char ch;
@@ -105,6 +141,14 @@ DMPAPI(unsigned int) PopQueue(Queue *queue)
 		return 0xffff;
 	
 	return (unsigned int)ch;
+}
+
+DMPAPI(unsigned char) PopQueueNoncheck(Queue* queue)
+{
+	unsigned char ch;
+	ch = *((unsigned char*)queue->data + queue->head * queue->dsize);
+	queue->head = (queue->head + 1) % queue->size;
+	return ch;
 }
 
 DMPAPI(bool) PopBufQueue(Queue *queue, void *buf)

@@ -30,8 +30,8 @@ UARTDriver::UARTDriver(int com_port, unsigned long com_baudrate, unsigned char c
     format      = com_format;
     rxtimeout   = com_rxtimeout;
     txtimeout   = com_txtimeout;
-    peek_stored = false;
     handle      = NULL;
+	_nonblocking_writes = true;
 }
 
 void UARTDriver::begin(uint32_t baud)
@@ -141,8 +141,7 @@ bool UARTDriver::is_initialized()
 
 void UARTDriver::set_blocking_writes(bool blocking)
 {
-    // default is non-blocking for 86duino API
-    // default Buffer size is 4k for Tx/Rx
+	_nonblocking_writes = !blocking;
 }
 
 bool UARTDriver::tx_pending()
@@ -153,7 +152,7 @@ bool UARTDriver::tx_pending()
 
 void UARTDriver::set_flow_control(enum flow_control flow_control_setting)
 {
-    // No hardware flow control on Vx86EX
+    // No hardware flow control on 86Duino One
 }
 
 /* Empty implementations of Stream virtual methods */
@@ -165,55 +164,60 @@ uint32_t UARTDriver::available()
 
 uint32_t UARTDriver::txspace()
 {
-    if(handle ==NULL) return 0;
+    if(handle == NULL) return 0;
     // caution! size define in uart.cpp
     return (4096 - com_QueryTxQueue(handle));
-}
-
-int UARTDriver::peek(void)
-{
-    if(handle == NULL) return -1;
-    if(peek_stored == true)
-        return peek_val;
-    else
-    {
-        if((peek_val = com_Read(handle)) == 0xFFFF)
-            return -1;//peek_val = -1;
-        peek_stored = true;
-        return peek_val;
-    }
 }
 
 int16_t UARTDriver::read()
 {
     int c;
     if(handle == NULL) return -1;
-    if(peek_stored == true)
-    {
-        peek_stored = false;
-        return peek_val;
-    }
-    else
-    {
-        c = com_Read(handle);
-        return (c == 0xFFFF) ? -1 : c;
-    }
+    c = com_Read(handle);
+    return (c == 0xFFFF) ? -1 : c;
 }
 
 /* Empty implementations of Print virtual methods */
 size_t UARTDriver::write(uint8_t c)
 {
     if(handle == NULL) return 0;
+
+	if (_nonblocking_writes && com_TxQueueFull(handle)) {
+		return 0;
+	}
+
+	while (com_TxQueueFull(handle))
+		;
+
     return (com_Write(handle, c) == true) ? 1 : 0;
 }
 
 size_t UARTDriver::write(const uint8_t *buffer, size_t size)
 {
-    size_t n = 0;
-    while (size--) {
-        n += write(*buffer++);
-    }
-    return n;
+	if (handle == NULL) return 0;
+
+	size_t ret = 0;
+	if (!_nonblocking_writes) {
+		/*
+		  use the per-byte delay loop in write() above for blocking writes
+		 */
+		while (size--) {
+			if (write(*buffer++) != 1) break;
+			ret++;
+		}
+		return ret;
+	}
+
+	// remaining queue space
+	// we will check tx space in uart_SendSize()
+	/*uint32_t space = txspace();
+	if (space <= 0) {
+		return 0;
+	}*/
+
+	ret = uart_SendSize(handle->func, (unsigned char*)buffer, size);
+
+	return (ret > 0) ? ret : 0;
 }
 
 }

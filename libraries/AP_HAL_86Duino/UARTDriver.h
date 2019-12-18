@@ -19,20 +19,18 @@ public:
 
     uint32_t available() override;
     uint32_t txspace() override;
-    int peek();
     int16_t read() override;
 
-    size_t write(uint8_t c);
-    size_t write(const uint8_t *buffer, size_t size);
+    size_t write(uint8_t c) override;
+    size_t write(const uint8_t *buffer, size_t size) override;
 
 private:
     enum flow_control _flow_control;
+	bool _nonblocking_writes;
     int port;
     unsigned long baudrate;
     unsigned char format;
     unsigned long rxtimeout;
     unsigned long txtimeout;
-    bool peek_stored;
-    int peek_val;
     COMPort *handle;
 };

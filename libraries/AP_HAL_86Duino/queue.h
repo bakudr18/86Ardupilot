@@ -44,6 +44,7 @@ DMPAPI(void) ClearQueue(Queue *queue);
 
 DMPAPI(Queue *) CreateBufQueue(unsigned long size, unsigned long dszie);
 DMPAPI(bool) PushBufQueue(Queue *queue, void *buf);
+DMPAPI(unsigned int) PushBufQueueSize(Queue* queue, void* buf, unsigned int size);
 DMPAPI(bool) PopBufQueue(Queue *queue, void *buf);
 DMPAPI(bool) PeekBufQueue(Queue *queue, void *buf);
 
@@ -51,6 +52,7 @@ DMPAPI(bool) PeekBufQueue(Queue *queue, void *buf);
 DMPAPI(Queue *) CreateQueue(unsigned long size);
 DMPAPI(bool) PushQueue(Queue *queue, unsigned char ch);
 DMPAPI(unsigned int) PopQueue(Queue *queue);
+DMPAPI(unsigned char) PopQueueNoncheck(Queue* queue);
 DMPAPI(unsigned int) PeekQueue(Queue *queue);
 
 DMPAPI(bool) QueueEmpty(Queue *queue);
