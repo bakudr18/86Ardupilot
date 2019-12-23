@@ -68,7 +68,7 @@ public:
 
 SPIDesc SPIDeviceManager::_device[] = {
     // different SPI tables per board subtype
-    SPIDesc("mpu9250",    0, 0, SPI_MODE3, 8, 9,  1*MHZ, 11*MHZ),
+    SPIDesc("mpu9250",    0, 0, SPI_MODE3, 8, 9,  1*MHZ, 10*MHZ),
     SPIDesc("bmp280",     0, 0, SPI_MODE3, 8, 8,  10*MHZ, 10*MHZ),
 };
 
@@ -122,6 +122,8 @@ void SPIBus::init()
         //SOURCE clock/(2 * SPI_CLOCK_DIV)
         set_Speed(_speed);
         useFIFO();
+
+		io_outpb(SPI_IOaddr + 8, io_inpb(SPI_IOaddr + 8) & 0xFE); // detach Interrupt
     }
     _initialized = true;
 }
@@ -217,8 +219,8 @@ bool SPIDevice::set_speed(AP_HAL::Device::Speed speed)
 
 bool SPIDevice::transfer(const uint8_t *send, uint32_t send_len, uint8_t *recv, uint32_t recv_len)
 {
-    if(SPI_IOaddr == 0) return 0;  
-    
+    if(SPI_IOaddr == 0) return 0;
+
     // check bus setting
     _cs_assert();
     if (_bus.Speed() != _speed) {
@@ -249,6 +251,7 @@ bool SPIDevice::transfer(const uint8_t *send, uint32_t send_len, uint8_t *recv, 
             recv[i] = io_inpb(SPI_IOaddr + 1);
         }
     }
+
     _cs_release();
     return true;
 }
