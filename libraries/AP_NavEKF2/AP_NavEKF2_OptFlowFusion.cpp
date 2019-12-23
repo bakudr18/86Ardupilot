@@ -34,6 +34,8 @@ void NavEKF2_core::SelectFlowFusion()
 
     // start performance timer
     hal.util->perf_begin(_perf_FuseOptFlow);
+	// Check for data at the fusion time horizon
+	flowDataToFuse = storedOF.recall(ofDataDelayed, imuDataDelayed.time_ms);
     // Perform Data Checks
     // Check if the optical flow data is still valid
     flowDataValid = ((imuSampleTime_ms - flowValidMeaTime_ms) < 1000);

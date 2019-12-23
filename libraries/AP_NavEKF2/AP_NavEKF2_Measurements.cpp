@@ -176,7 +176,7 @@ void NavEKF2_core::writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRa
         // Save data to buffer
         storedOF.push(ofDataNew);
         // Check for data at the fusion time horizon
-        flowDataToFuse = storedOF.recall(ofDataDelayed, imuDataDelayed.time_ms);
+        //flowDataToFuse = storedOF.recall(ofDataDelayed, imuDataDelayed.time_ms);
     }
 }
 
