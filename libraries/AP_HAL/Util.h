@@ -115,6 +115,7 @@ public:
     virtual void *dma_allocate(size_t size) { return malloc(size); }
     virtual void dma_free(void *ptr, size_t size) { return free(ptr); }
     
+	virtual void init_perf() {}
 protected:
     // we start soft_armed false, so that actuators don't send any
     // values until the vehicle code has fully started

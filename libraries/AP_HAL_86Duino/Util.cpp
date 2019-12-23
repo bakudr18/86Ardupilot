@@ -3,6 +3,7 @@
 #include <cmath>
 #include <dos.h>
 #include <stdlib.h>
+#include <assert.h>
 
 extern const AP_HAL::HAL& hal ;
 
@@ -25,7 +26,12 @@ Util::Util()
      * number of perf counters for now; if we grow more, it will just
      * reallocate the memory pool */
     _perf_counters.reserve(50);
+	_init_perf = false;
+}
 
+void Util::init_perf()
+{
+	_init_perf = true;
 }
 
 enum Util::safety_state Util::safety_switch_state()
@@ -74,15 +80,19 @@ Util::perf_counter_t Util::perf_alloc(perf_counter_type t, const char *name)
          */
         return (Util::perf_counter_t)(uintptr_t) -1;
     }
-
+	io_DisableINT();
     Util::perf_counter_t pc = (Util::perf_counter_t) _perf_counters.size();
     _perf_counters.emplace_back(t, name);
-
+	io_RestoreINT();
     return pc;
 }
 
 void Util::perf_begin(perf_counter_t h)
 {
+	if (!_init_perf) {
+		return;
+	}
+
     uintptr_t idx = (uintptr_t)h;
 
     if (idx >= _perf_counters.size()) {
@@ -110,6 +120,9 @@ void Util::perf_begin(perf_counter_t h)
 
 void Util::perf_end(perf_counter_t h)
 {
+	if (!_init_perf) {
+		return;
+	}
     uintptr_t idx = (uintptr_t)h;
 
     if (idx >= _perf_counters.size()) {
@@ -149,6 +162,7 @@ void Util::perf_end(perf_counter_t h)
      * Knuth/Welford recursive avg and variance of update intervals (via Wikipedia)
      * Same implementation of PX4.
      */
+
     const double delta_intvl = elapsed - perf.avg;
     perf.avg += (delta_intvl / perf.count);
     perf.m2 += (delta_intvl * (elapsed - perf.avg));
@@ -157,6 +171,9 @@ void Util::perf_end(perf_counter_t h)
 
 void Util::perf_count(perf_counter_t h)
 {
+	if (!_init_perf) {
+		return;
+	}
     uintptr_t idx = (uintptr_t)h;
 
     if (idx >= _perf_counters.size()) {
@@ -178,6 +195,8 @@ void Util::perf_count(perf_counter_t h)
 
 void Util::_debug_counters()
 {
+	//hal.scheduler->suspend_timer_procs();
+
     uint64_t now = AP_HAL::millis64();
 
     if (now - _last_debug_msec < 5000) {
@@ -193,8 +212,9 @@ void Util::_debug_counters()
 
     for (auto &c : v) {
         if (!c.count) {
-            hal.console->printf(
-                    "%-30s\t" "(no events)\n", c.name);
+			continue;
+            /*hal.console->printf(
+                    "%-30s\t" "(no events)\n", c.name);*/
         } else if (c.type == Util::PC_ELAPSED) {
             hal.console->printf(
                     "%-30s\t"
@@ -212,7 +232,32 @@ void Util::_debug_counters()
     }
 
     _last_debug_msec = now;
+	
+	reset_counter();
+
+	//hal.scheduler->resume_timer_procs();
 }
+
+void Util::reset_counter()
+{
+	for (auto& c : _perf_counters) {
+		if (!c.count) {
+			continue;
+		}
+		else if (c.type == Util::PC_ELAPSED) {
+			c.count = 0;
+			c.min = ULONG_MAX;
+			c.max = 0;
+			c.avg = 0;
+			c.m2 = 0;
+			c.total = 0;
+		}
+		else {
+			c.count = 0;
+		}
+	}
+}
+
 AP_HAL::Semaphore *Util::new_semaphore() { return new Semaphore; }
 
 }

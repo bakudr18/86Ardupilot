@@ -18,8 +18,13 @@ public:
     Perf_Counter(perf_counter_type type_, const char *name_)
         : name{name_}
         , type{type_}
-        , min{ULONG_MAX}
-        , max{0}
+        , min(ULONG_MAX)
+        , max(0)
+		, count(0)
+		, start(0)
+		, total(0)
+		, avg(0.0)
+		, m2(0.0)
     {
     }
 
@@ -76,11 +81,17 @@ public:
     AP_HAL::Semaphore *new_semaphore(void) override;
     void _debug_counters() override;
 
+	void init_perf() override;
+
 private:
+	void reset_counter();
+
     std::vector<Perf_Counter> _perf_counters;
     std::atomic<unsigned int> _update_count;
     uint64_t _last_debug_msec;
 
+	bool _init_perf;
+	
 };
 
 }
