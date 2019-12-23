@@ -278,6 +278,7 @@ AP_InertialSensor_Invensense::AP_InertialSensor_Invensense(AP_InertialSensor &im
     , _temp_filter(1000, 1)
     , _rotation(rotation)
     , _dev(std::move(dev))
+	, _perf_sample(hal.util->perf_alloc(AP_HAL::Util::PC_COUNT, "MPU9250_sample"))
 {
 }
 
@@ -636,13 +637,13 @@ bool AP_InertialSensor_Invensense::_accumulate(uint8_t *samples, uint8_t n_sampl
                         int16_val(data, 4),
                         -int16_val(data, 6));
         gyro *= GYRO_SCALE;
-
+		
         _rotate_and_correct_accel(_accel_instance, accel);
         _rotate_and_correct_gyro(_gyro_instance, gyro);
-
+		
         _notify_new_accel_raw_sample(_accel_instance, accel, 0, fsync_set);
         _notify_new_gyro_raw_sample(_gyro_instance, gyro);
-
+		
         _temp_filtered = _temp_filter.apply(temp);
     }
     return true;
@@ -753,12 +754,21 @@ void AP_InertialSensor_Invensense::_read_fifo()
       the ones at the end of the FIFO, so clear those with a reset
       once we've read the first 24. Reading 24 gives us the normal
       number of samples for fast sampling at 400Hz
+
+	  In 1kHz timer we need to trim samples to prevent overruns.
      */
+	if (hal.scheduler->spi_in_timer()) {
+		if (n_samples > 8) {
+			need_reset = true;
+			n_samples = 8;
+			hal.util->perf_count(_perf_sample);
+		}
+	}
     if (n_samples > 32) {
         need_reset = true;
         n_samples = 24;
     }
-	
+
     while (n_samples > 0) {
         uint8_t n = MIN(n_samples, MPU_FIFO_BUFFER_LEN);
         if (!_dev->set_chip_select(true)) {
@@ -780,7 +790,7 @@ void AP_InertialSensor_Invensense::_read_fifo()
             }
             _dev->set_chip_select(false);
         }
-
+		
         if (_fast_sampling) {
             if (!_accumulate_fast_sampling(rx, n)) {
                 debug("stop at %u of %u", n_samples, bytes_read/MPU_SAMPLE_SIZE);
@@ -791,6 +801,7 @@ void AP_InertialSensor_Invensense::_read_fifo()
                 break;
             }
         }
+		
         n_samples -= n;
     }
 
@@ -799,7 +810,7 @@ void AP_InertialSensor_Invensense::_read_fifo()
         //debug("fifo reset n_samples %u", bytes_read/MPU_SAMPLE_SIZE);
         _fifo_reset();
     }
-
+	
 check_registers:
     // check next register value for correctness
 	if (hal.scheduler->spi_in_timer()) {
