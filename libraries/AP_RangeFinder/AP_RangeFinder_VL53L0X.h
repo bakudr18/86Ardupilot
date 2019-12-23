@@ -79,4 +79,6 @@ private:
 
     uint32_t sum_mm;
     uint32_t counter;
+
+	bool need_start_continuous;
 };

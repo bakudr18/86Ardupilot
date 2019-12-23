@@ -216,9 +216,10 @@ const AP_RangeFinder_VL53L0X::RegData AP_RangeFinder_VL53L0X::tuning_data[] =
    constructor is not called until detect() returns true, so we
    already know that we should setup the rangefinder
 */
-AP_RangeFinder_VL53L0X::AP_RangeFinder_VL53L0X(RangeFinder::RangeFinder_State &_state, AP_HAL::OwnPtr<AP_HAL::I2CDevice> _dev)
-    : AP_RangeFinder_Backend(_state)
-    , dev(std::move(_dev)) {}
+AP_RangeFinder_VL53L0X::AP_RangeFinder_VL53L0X(RangeFinder::RangeFinder_State& _state, AP_HAL::OwnPtr<AP_HAL::I2CDevice> _dev)
+	: AP_RangeFinder_Backend(_state)
+	, dev(std::move(_dev))
+{}
 
 
 /*
@@ -726,6 +727,7 @@ void AP_RangeFinder_VL53L0X::start_continuous(void)
     // continuous back-to-back mode
     write_register(SYSRANGE_START, 0x02); // VL53L0X_REG_SYSRANGE_MODE_BACKTOBACK
 
+	need_start_continuous = false;
     start_ms = AP_HAL::millis();
 }
 
@@ -734,16 +736,17 @@ bool AP_RangeFinder_VL53L0X::get_reading(uint16_t &reading_mm)
 {
     if ((read_register(RESULT_INTERRUPT_STATUS) & 0x07) == 0) {
         if (AP_HAL::millis() - start_ms > 200) {
-            start_continuous();
+			need_start_continuous = true;
+            //start_continuous();
         }
         return false;
     }
-
+	
     // assumptions: Linearity Corrective Gain is 1000 (default);
     // fractional ranging is not enabled
     reading_mm = read_register16(RESULT_RANGE_STATUS + 10);
     write_register(SYSTEM_INTERRUPT_CLEAR, 0x01);
-
+	
     return true;
 }
 
@@ -800,13 +803,21 @@ void AP_RangeFinder_VL53L0X::update(void)
 			set_status(RangeFinder::RangeFinder_NoData);
 		}
 	}
+
+	if (need_start_continuous) {
+		hal.scheduler->suspend_timer_procs();
+		start_continuous();
+		hal.scheduler->resume_timer_procs();
+	}
 }
 
 void AP_RangeFinder_VL53L0X::timer(void)
 {
+	
     uint16_t range_mm;
     if (get_reading(range_mm) && range_mm < 8000) {
         sum_mm += range_mm;
         counter++;
     }
+	
 }
