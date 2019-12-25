@@ -468,11 +468,11 @@ Compass::init()
         // detect available backends. Only called once
         _detect_backends();
     }
-    //if (_compass_count != 0) {
-    //    // get initial health status
-    //    hal.scheduler->delay(100);
-    //    read();
-    //}
+    if (_compass_count != 0) {
+        // get initial health status
+        hal.scheduler->delay(100);
+        read();
+    }
     return true;
 }
 
