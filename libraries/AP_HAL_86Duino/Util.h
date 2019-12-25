@@ -10,6 +10,8 @@
 
 namespace x86Duino {
 
+#define X86DUINO_MAX_WDT_PROCS 8
+
 class Perf_Counter {
     using perf_counter_type = AP_HAL::Util::perf_counter_type;
     using perf_counter_t = AP_HAL::Util::perf_counter_t;
@@ -83,12 +85,35 @@ public:
 
 	void init_perf() override;
 
+	void init_wdt(uint32_t microseconds, bool type);
+	void register_wdt_process(AP_HAL::MemberProc);
+	void wdt_settimer(uint32_t microseconds);
+	void reset_wdt();
+	bool isResetByWDT();
+	void stop_wdt();
+	void detachInterrupt_wdt();
+	
 private:
 	void reset_counter();
 
     std::vector<Perf_Counter> _perf_counters;
     std::atomic<unsigned int> _update_count;
     uint64_t _last_debug_msec;
+
+	bool rebootByWDT;
+	bool timerWDTEnable;
+	bool timerWDTInit;
+	bool timerWDTIntEnable;
+	uint8_t wdt_mode;
+
+	AP_HAL::MemberProc _wdt_proc[X86DUINO_MAX_WDT_PROCS];
+	volatile uint8_t _num_wdt_procs;
+	volatile bool _in_wdt_proc;
+
+	static int timerwdt_isr_handler(int irq, void* data);
+	void _run_wdt_procs();
+	void _wdt_enable();
+	void _wdt_disable();
 
 	bool _init_perf;
 	

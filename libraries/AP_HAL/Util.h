@@ -116,6 +116,13 @@ public:
     virtual void dma_free(void *ptr, size_t size) { return free(ptr); }
     
 	virtual void init_perf() {}
+	virtual void init_wdt(uint32_t microseconds, bool type) {}
+	virtual void register_wdt_process(AP_HAL::MemberProc) {}
+	virtual void wdt_settimer(uint32_t microseconds) {}
+	virtual void reset_wdt() {}
+	virtual bool isResetByWDT() { return false; }
+	virtual void stop_wdt() {}
+	virtual void detachInterrupt_wdt() {}
 protected:
     // we start soft_armed false, so that actuators don't send any
     // values until the vehicle code has fully started

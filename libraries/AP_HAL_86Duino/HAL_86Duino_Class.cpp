@@ -10,7 +10,6 @@
 #include "io.h"
 #include "irq.h"
 #include "com.h"
-#include "wdt.h"
 #include "pins_arduino.h"
 using namespace x86Duino;
 
@@ -173,9 +172,6 @@ void HAL_86Duino::run(int argc, char* const argv[], Callbacks* callbacks) const
     for (i = 0; i < 4; i++)
         mc_SetMode(i, MCMODE_PWM_SIFB);
 
-    // init wdt1
-    wdt_init();
-
     if (Global_irq_Init == false)
     {
         // set MCM IRQ
@@ -193,6 +189,10 @@ void HAL_86Duino::run(int argc, char* const argv[], Callbacks* callbacks) const
         Set_MCIRQ(GetMCIRQ());
         Global_irq_Init = true;
     }
+
+	
+	// init wdt 1Hz
+	//util->init_wdt(1000000UL, false);
 
     usbUart.begin(115200);
 
