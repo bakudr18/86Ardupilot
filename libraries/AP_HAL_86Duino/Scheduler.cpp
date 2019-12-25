@@ -180,7 +180,7 @@ void Scheduler::resume_timer_procs() {
 	//io_RestoreINT();
 
 	if (_timer_event_missed == true) {
-		_run_timer_procs(false);
+		//_run_timer_procs(false);
 		_timer_event_missed = false;
 	}
 	//io_RestoreINT();
