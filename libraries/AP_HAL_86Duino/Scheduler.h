@@ -36,6 +36,8 @@ public:
 	bool     spi_in_timer() { return _spi_in_timer; }
 	bool	 i2c_in_timer() { return _i2c_in_timer; }
 private:
+	void init_timer0();
+	void init_timerRTC();
 	bool _initialized;
 	AP_HAL::Proc _failsafe;
 
@@ -52,17 +54,22 @@ private:
 	volatile bool _timer_suspended;
 	volatile bool _timer_event_missed;
 
-
 	void _run_io(void);
 
-	unsigned char _freq;
 	bool _timer_1k_enable;
+
+	unsigned char _freq;
+	bool timerRTCInit;
+	bool timerRTCEnable;
+	static int timerrtc_isr_handler(int irq, void* data);
+	void setRTCPeriod(long microseconds);
 
 	AP_HAL::Util::perf_counter_t  _perf_timers;
 	AP_HAL::Util::perf_counter_t  _perf_io_timers;
 	AP_HAL::Util::perf_counter_t  _perf_storage_timer;
 	AP_HAL::Util::perf_counter_t  _perf_delay;
 	AP_HAL::Util::perf_counter_t  _perf_overrun_timers;
+	AP_HAL::Util::perf_counter_t  _perf_overrun_timerRTC;
 
 	void call_delay_cb();
 	uint16_t _min_delay_cb_ms;
