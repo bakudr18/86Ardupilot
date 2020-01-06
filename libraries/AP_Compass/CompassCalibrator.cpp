@@ -148,12 +148,15 @@ CompassCalibrator::completion_mask_t& CompassCalibrator::get_completion_mask()
 }
 
 bool CompassCalibrator::check_for_timeout() {
+	hal.scheduler->suspend_timer_procs();
     uint32_t tnow = AP_HAL::millis();
     if(running() && tnow - _last_sample_ms > 1000) {
         _retry = false;
         set_status(COMPASS_CAL_FAILED);
+		hal.scheduler->resume_timer_procs();
         return true;
     }
+	hal.scheduler->resume_timer_procs();
     return false;
 }
 
@@ -195,8 +198,10 @@ void CompassCalibrator::update(bool &failure) {
     } else if(_status == COMPASS_CAL_RUNNING_STEP_TWO) {
         if (_fit_step >= 35) {
             if(fit_acceptable()) {
+				hal.console->printf("COMPASS_CAL_SUCCESS\n");
                 set_status(COMPASS_CAL_SUCCESS);
             } else {
+				hal.console->printf("COMPASS_CAL_FAILED\n");
                 set_status(COMPASS_CAL_FAILED);
                 failure = true;
             }
