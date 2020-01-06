@@ -32,6 +32,7 @@
 #include "queue.h"
 #include "io.h"
 #include <AP_HAL/AP_HAL.h>
+#include <AP_Math/AP_Math.h>
 extern const AP_HAL::HAL& hal;
 
 DMPAPI(Queue *) CreateBufQueue(unsigned long size, unsigned long dsize)
@@ -103,7 +104,7 @@ DMPAPI(bool) PushBufQueue(Queue *queue, void *buf)
 // It will trim the bsize if there is not enough queue size.
 DMPAPI(unsigned int) PushBufQueueSize(Queue* queue, void* buf, unsigned int bsize)
 {
-	unsigned buf_tail_size, space;
+	unsigned int space;
 
 	space = queue->size - 1 - QueueSize(queue);
 	if (space == 0) {
@@ -111,22 +112,11 @@ DMPAPI(unsigned int) PushBufQueueSize(Queue* queue, void* buf, unsigned int bsiz
 	}
 
 	// trim the size
-	if (bsize > space) {
-		bsize = space;
-	}
+	bsize = MIN(bsize, space);
+	const unsigned int byte_write1 = MIN(bsize, queue->size - queue->tail);
 
-	if (queue->head > queue->tail || (buf_tail_size = queue->size - queue->tail) >= bsize) {
-		// push back at tail
-		memcpy((unsigned char*)queue->data + queue->tail * queue->dsize, buf, bsize * queue->dsize);
-	}
-	else if (buf_tail_size > 0) {
-		// divide to 2 pieces and push
-		memcpy((unsigned char*)queue->data + queue->tail * queue->dsize, buf, buf_tail_size * queue->dsize);
-		memcpy((unsigned char*)queue->data, (unsigned char*)buf + buf_tail_size, (bsize - buf_tail_size) * queue->dsize);
-	}
-	else {
-		hal.console->printf("error: PushBufQueueSize()\n");
-	}
+	memcpy((unsigned char*)queue->data + queue->tail * queue->dsize, buf, byte_write1 * queue->dsize);
+	memcpy((unsigned char*)queue->data, (unsigned char*)buf + byte_write1, (bsize - byte_write1) * queue->dsize);
 
 	queue->tail = (queue->tail + bsize) % queue->size;
 
