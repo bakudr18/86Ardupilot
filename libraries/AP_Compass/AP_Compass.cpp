@@ -522,7 +522,7 @@ void Compass::_detect_backends(void)
 
 
     // default mask to disable some compasses
-    int32_t mask_default = 1U<<DRIVER_QMC5883;
+    int32_t mask_default = 1U << DRIVER_QMC5883;
 #if CONFIG_HAL_BOARD == HAL_BOARD_PX4
     if (AP_BoardConfig::get_board_type() == AP_BoardConfig::PX4_BOARD_PIXHAWK2) {
         // default to disabling LIS3MDL on pixhawk2 due to hardware issue
@@ -767,6 +767,11 @@ void Compass::_detect_backends(void)
                 AP_Compass_AK8963::name, false);
     ADD_BACKEND(DRIVER_LSM9DS1, AP_Compass_LSM9DS1::probe(*this, hal.spi->get_device("lsm9ds1_m")),
                 AP_Compass_LSM9DS1::name, false);
+#elif HAL_COMPASS_DEFAULT == HAL_COMPASS_86DUINO
+	ADD_BACKEND(DRIVER_AK8963, AP_Compass_AK8963::probe_mpu9250(*this, 0),
+		AP_Compass_AK8963::name, false);
+	ADD_BACKEND(DRIVER_HMC5883, AP_Compass_HMC5843::probe(*this, hal.i2c_mgr->get_device(0, HAL_COMPASS_HMC5843_I2C_ADDR)),
+		AP_Compass_HMC5843::name, true);
 #else
     #error Unrecognised HAL_COMPASS_TYPE setting
 #endif

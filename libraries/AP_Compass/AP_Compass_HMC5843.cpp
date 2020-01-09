@@ -159,6 +159,10 @@ bool AP_Compass_HMC5843::init()
         return false;
     }
 
+	if (hal.scheduler->i2c_in_timer()) {
+		hal.scheduler->suspend_timer_procs();
+	}
+
     // high retries for init
     _bus->set_retries(10);
     
@@ -193,6 +197,9 @@ bool AP_Compass_HMC5843::init()
     
     bus_sem->give();
 
+	if (hal.scheduler->i2c_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
     // perform an initial read
     read();
 
@@ -207,11 +214,14 @@ bool AP_Compass_HMC5843::init()
         set_external(_compass_instance, true);
     }
 
-    #if CONFIG_HAL_BOARD != HAL_BOARD_86DUINO
-    // read from sensor at 75Hz
-    _bus->register_periodic_callback(13333,
-                                     FUNCTOR_BIND_MEMBER(&AP_Compass_HMC5843::_timer, void));
-    #endif
+	if (hal.scheduler->i2c_in_timer()) {
+		hal.scheduler->register_timer_process(FUNCTOR_BIND_MEMBER(&AP_Compass_HMC5843::_timer, void));
+	}
+	else {
+		// read from sensor at 75Hz
+		_bus->register_periodic_callback(13333,
+			FUNCTOR_BIND_MEMBER(&AP_Compass_HMC5843::_timer, void));
+	}
 
     hal.console->printf("HMC5843 found on bus 0x%x\n", _bus->get_bus_id());
     
@@ -219,19 +229,22 @@ bool AP_Compass_HMC5843::init()
 
 errout:
     bus_sem->give();
+	if (hal.scheduler->i2c_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
     return false;
 }
 
 void AP_Compass_HMC5843::accumulate(void) 
 {
-    #if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
-    static uint64_t last_t = AP_HAL::micros64();
-    if( AP_HAL::micros64() - last_t > 13333)
-    {
-        last_t = AP_HAL::micros64();        
-        _timer();
-    }
-    #endif
+	if (!hal.scheduler->i2c_in_timer()) {
+		//static uint64_t last_t = AP_HAL::micros64();
+		//if (AP_HAL::micros64() - last_t > 13333)
+		//{
+		//	last_t = AP_HAL::micros64();
+			_timer();
+		//}
+	}
 }
 
 /*
@@ -272,8 +285,12 @@ void AP_Compass_HMC5843::_timer()
     
     // correct raw_field for known errors
     correct_field(raw_field, _compass_instance);
-    
-    if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+#if CONFIG_HAL_BOARD == HAL_BOARD_86DUINO
+	if (_sem->take_nonblocking())
+#else
+	if (_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER))
+#endif
+	{
         _mag_x_accum += raw_field.x;
         _mag_y_accum += raw_field.y;
         _mag_z_accum += raw_field.z;
@@ -309,9 +326,12 @@ void AP_Compass_HMC5843::read()
     
     if (_accum_count == 0) {
         _sem->give();
-        accumulate();
         return;
     }
+
+	if (hal.scheduler->i2c_in_timer()) {
+		hal.scheduler->suspend_timer_procs();
+	}
 
     Vector3f field(_mag_x_accum * _scaling[0],
                    _mag_y_accum * _scaling[1],
@@ -323,6 +343,10 @@ void AP_Compass_HMC5843::read()
 
     _sem->give();
     
+	if (hal.scheduler->i2c_in_timer()) {
+		hal.scheduler->resume_timer_procs();
+	}
+
     publish_filtered_field(field, _compass_instance);
 }
 
