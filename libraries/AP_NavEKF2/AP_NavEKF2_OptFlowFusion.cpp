@@ -23,7 +23,7 @@ extern const AP_HAL::HAL& hal;
 void NavEKF2_core::SelectFlowFusion()
 {
 	// Check for data at the fusion time horizon
-	flowDataToFuse = storedOF.recall(ofDataDelayed, imuDataDelayed.time_ms);
+	//flowDataToFuse = storedOF.recall(ofDataDelayed, imuDataDelayed.time_ms);
     // Check if the magnetometer has been fused on that time step and the filter is running at faster than 200 Hz
     // If so, don't fuse measurements on this time step to reduce frame over-runs
     // Only allow one time slip to prevent high rate magnetometer data preventing fusion of other measurements
