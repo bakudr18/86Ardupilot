@@ -208,7 +208,8 @@ void HAL_86Duino::run(int argc, char* const argv[], Callbacks* callbacks) const
 
     callbacks->setup();
     scheduler->system_initialized();
-    ::printf("system_initialized\n");
+	util->init_perf();
+    console->printf("system_initialized\n");
     for (;;) {
         callbacks->loop();
     }
