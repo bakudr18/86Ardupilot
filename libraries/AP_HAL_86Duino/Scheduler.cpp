@@ -399,7 +399,7 @@ void Scheduler::_run_io(void)
 	static uint32_t last_dataflash = 0;
 	uint32_t t = AP_HAL::millis();
 	if (t - last_dataflash > 10) {
-		last_dataflash = t + 300; // 300ms ~= 3Hz
+		last_dataflash = t + 200; // 200ms ~= 5Hz
 		for (int i = 0; i < _num_io_procs; i++) {
 			if (_io_proc[i]) {
 				_io_proc[i]();
