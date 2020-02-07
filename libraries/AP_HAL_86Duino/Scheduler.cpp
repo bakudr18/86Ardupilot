@@ -50,7 +50,7 @@ Scheduler::Scheduler() :
 	_min_delay_cb_ms = 65535;
 	_delay_cb = nullptr;
 	_spi_in_timer = USE_TIMER;
-	_i2c_in_timer = USE_TIMER;
+	_i2c_in_timer = USE_ACCUMULATE;
 }
 
 DMP_INLINE(unsigned char) inpb_cmos(unsigned char reg) {
