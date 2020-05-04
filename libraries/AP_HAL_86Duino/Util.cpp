@@ -103,10 +103,10 @@ Util::perf_counter_t Util::perf_alloc(perf_counter_type t, const char *name)
          */
         return (Util::perf_counter_t)(uintptr_t) -1;
     }
-	io_DisableINT();
+	
     Util::perf_counter_t pc = (Util::perf_counter_t) _perf_counters.size();
     _perf_counters.emplace_back(t, name);
-	io_RestoreINT();
+	
     return pc;
 }
 
@@ -161,7 +161,7 @@ void Util::perf_end(perf_counter_t h)
     }
 
     if (perf.start == 0) {
-        hal.console->printf("perf_begin() called before begin() on perf_counter_t(%s)\n",
+        hal.console->printf("perf_end() called before begin() on perf_counter_t(%s)\n",
                             perf.name);
         return;
     }
@@ -218,19 +218,18 @@ void Util::perf_count(perf_counter_t h)
 
 void Util::_debug_counters()
 {
-	//hal.scheduler->suspend_timer_procs();
-
+	
     uint64_t now = AP_HAL::millis64();
 
     if (now - _last_debug_msec < 5000) {
         return;
     }
-
+	io_DisableINT();
     unsigned int uc = _update_count;
     auto v = _perf_counters;
-
+	io_RestoreINT();
     if (uc != _update_count) {
-        fprintf(stderr, "WARNING!! potentially wrong counters!!!");
+		hal.console->printf("WARNING!! potentially wrong counters!!!");
     }
 
     for (auto &c : v) {
@@ -257,12 +256,11 @@ void Util::_debug_counters()
     _last_debug_msec = now;
 	
 	reset_counter();
-
-	//hal.scheduler->resume_timer_procs();
 }
 
 void Util::reset_counter()
 {
+	io_DisableINT();
 	for (auto& c : _perf_counters) {
 		if (!c.count) {
 			continue;
@@ -279,6 +277,7 @@ void Util::reset_counter()
 			c.count = 0;
 		}
 	}
+	io_RestoreINT();
 }
 
 AP_HAL::Semaphore *Util::new_semaphore() { return new Semaphore; }

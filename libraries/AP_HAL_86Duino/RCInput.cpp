@@ -224,8 +224,10 @@ uint16_t RCInput::read(uint8_t ch) {
 	if (!_init || ch > RC_INPUT_MAX_CH) {
 		return 0;
 	}
+	io_DisableINT();
     _ch_flag &= ~(0x01 << ch);
 	uint16_t rcinp = _rc_values[ch] / 100;
+	io_RestoreINT();
     return rcinp;
 }
 
