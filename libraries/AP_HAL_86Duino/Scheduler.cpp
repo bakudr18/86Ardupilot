@@ -12,7 +12,7 @@
 #include <time.h>
 #include <fcntl.h>
 
-#define MC_1k 3     // 1k hz timer 0
+#define MC_1k 3     // 1k hz timerOne
 #define MD_1k 2
 
 #define USE_TIMER 1
@@ -72,8 +72,8 @@ DMP_INLINE(void) outpb_cmos(unsigned char reg, unsigned char data) {
 static int mcint_offset[3] = { 0, 8, 16 };
 int timer_1k_count = 0;
 
-// timer 1khz ISR'
-static char* isrname_one = (char*)"timer_1k";
+// timerOne 1khz ISR'
+static char* isrname_one = (char*)"timerOne_1k";
 static int timer1k_isr_handler(int irq, void* data)
 {
 	if ((mc_inp(MC_1k, 0x04) & (PULSE_END_INT << mcint_offset[MD_1k])) == 0) return ISR_NONE;
@@ -95,14 +95,14 @@ void Scheduler::init()
 	setenv("TZ", "GMT+8", 1);   // set TZ system variable (set to GMT+0)
 	tzset();    // setup time zone
 
-	// init timer 0
-	init_timer0();
+	// init timer One
+	init_timerOne();
 
 	//init timer RTC
 	init_timerRTC();
 }
 
-void Scheduler::init_timer0() 
+void Scheduler::init_timerOne() 
 {
 	// initialize()
 	mcpwm_Disable(MC_1k, MD_1k);
@@ -125,6 +125,7 @@ void Scheduler::init_timer0()
 	_timer_1k_enable = true;
 }
 
+// timerRTC is used to run IO process
 void Scheduler::init_timerRTC()
 {
 	unsigned char tmp;

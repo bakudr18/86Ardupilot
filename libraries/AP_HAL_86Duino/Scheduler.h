@@ -36,7 +36,7 @@ public:
 	bool     spi_in_timer() { return _spi_in_timer; }
 	bool	 i2c_in_timer() { return _i2c_in_timer; }
 private:
-	void init_timer0();
+	void init_timerOne();
 	void init_timerRTC();
 	bool _initialized;
 	AP_HAL::Proc _failsafe;

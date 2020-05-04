@@ -48,13 +48,6 @@ void UARTDriver::begin(uint32_t baud, uint16_t rxS, uint16_t txS)
         end();  // close it and re-open
     }
 
-    if (io_Init() == false) {
-        printf("ERROR: IO init fail.\n");
-        return;
-    }
-    sb_Write(0xc0, (sb_Read(0xc0) & 0x7fffffffL) | ((unsigned long)1L << 31));
-    io_Close();
-
     if ((handle = com_Init(port)) == NULL)
     {
         printf("COM init fail!!\n");

@@ -23,10 +23,10 @@ void panic(const char *errormsg, ...)
     hal.console->printf(errormsg, ap);
     va_end(ap);
 
+	hal.console->printf("\npanic\n");
+	::printf("\npanic\n");
     hal.scheduler->delay_microseconds(10000);
     
-    hal.console->printf("\npanic\n");
-    ::printf("\npanic\n");
     while (1) {}
 }
 

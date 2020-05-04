@@ -123,7 +123,6 @@ void SPIBus::init()
         set_Speed(_speed);
         useFIFO();
 
-		io_outpb(SPI_IOaddr + 8, io_inpb(SPI_IOaddr + 8) & 0xFE); // detach Interrupt
     }
     _initialized = true;
 }

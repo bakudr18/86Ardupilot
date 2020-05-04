@@ -122,7 +122,7 @@ HAL_86Duino::HAL_86Duino() :
         &gpioDriver,        /* GPIO */
         &rcinDriver,        /* rc input */
         &rcoutDriver,       /* rc output */
-        &schedulerInstance,            /* scheduler */
+        &schedulerInstance, /* scheduler */
         &utilInstance,      /* utility */
         nullptr,
 		nullptr)
