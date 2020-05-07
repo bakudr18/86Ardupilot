@@ -40,5 +40,5 @@ http://ardupilot.org/copter/docs/configuring-hardware.html
 
 ### Demo Video
 <div align=center>
-<a href="https://www.youtube.com/watch?v=LruKS4eodQ0"><img src="https://img.youtube.com/vi/LruKS4eodQ0/0.jpg" alt="86Ardupilot"></a>
+<a href="https://www.youtube.com/watch?v=Km-dQn0TMFc"><img src="https://img.youtube.com/vi/Km-dQn0TMFc/0.jpg" alt="86DuPilot"></a>
 </div>
